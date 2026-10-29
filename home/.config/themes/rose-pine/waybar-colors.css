@@ -1,0 +1,15 @@
+@define-color bg #191724;
+@define-color bg-alpha rgba(25, 23, 36, 0.92);
+@define-color fg #e0def4;
+@define-color border #26233a;
+@define-color accent #c4a7e7;
+@define-color hover #6e6a86;
+@define-color black #26233a;
+@define-color red #eb6f92;
+@define-color green #31748f;
+@define-color yellow #f6c177;
+@define-color blue #9ccfd8;
+@define-color magenta #c4a7e7;
+@define-color cyan #ebbcba;
+@define-color white #e0def4;
+@define-color inactive #6e6a86;

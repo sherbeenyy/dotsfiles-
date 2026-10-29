@@ -1,0 +1,260 @@
+# Sway Configuration
+
+### Variables
+# Portals outlive the previous sway session with dead backends, which makes waybar and
+# GTK apps wait ~25s on startup. Stop them so D-Bus restarts them for this session.
+exec "dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP=sway SWAYSOCK && systemctl --user stop xdg-desktop-portal xdg-desktop-portal-gtk xdg-desktop-portal-wlr xdg-desktop-portal-gnome"
+set $mod Mod4
+set $left h
+set $down j
+set $up k
+set $right l
+set $term foot
+set $menu fuzzel
+
+# System-level defaults must load first so user preferences override them
+include /etc/sway/config-vars.d/*
+
+### Output configuration
+# Layout, primary screen and hotplug are handled by display.sh (output names
+# like eDP-2 / HDMI-A-1 change between boots, so they aren't hardcoded here).
+output * bg ~/.local/share/backgrounds/back.jpg fill
+set $display ~/.config/sway/display.sh
+exec $display watch
+include ~/.config/sway/display-workspaces.conf
+
+### Ricing & Visual Settings
+gaps inner 2
+gaps outer 2
+smart_gaps off
+
+# Border styling
+default_border pixel 2
+default_floating_border pixel 2
+
+# Window Colors
+include ~/.config/themes/current/sway-colors
+
+### Input configuration (Touchpad)
+input type:touchpad {
+    tap enabled
+    natural_scroll enabled
+    dwt enabled
+}
+
+### Input configuration (Keyboard)
+input * {
+    xkb_layout "us,ara"
+}
+
+### Key bindings
+# Basics:
+bindsym $mod+Return exec $term
+bindsym $mod+Shift+q kill
+bindsym $mod+d exec $menu
+floating_modifier $mod normal
+bindsym $mod+Shift+c reload
+bindsym $mod+Shift+e exec swaynag -t warning -m 'You pressed the exit shortcut. Do you really want to exit sway? This will end your Wayland session.' -B 'Yes, exit sway' 'swaymsg exit'
+
+# Moving focus:
+bindsym $mod+$left focus left
+bindsym $mod+$down focus down
+bindsym $mod+$up focus up
+bindsym $mod+$right focus right
+
+bindsym $mod+Left focus left
+bindsym $mod+Down focus down
+bindsym $mod+Up focus up
+bindsym $mod+Right focus right
+
+# Moving containers:
+bindsym $mod+Shift+$left move left
+bindsym $mod+Shift+$down move down
+bindsym $mod+Shift+$up move up
+bindsym $mod+Shift+$right move right
+
+bindsym $mod+Shift+Left move left
+bindsym $mod+Shift+Down move down
+bindsym $mod+Shift+Up move up
+bindsym $mod+Shift+Right move right
+
+# Workspaces:
+bindsym $mod+1 workspace number 1
+bindsym $mod+2 workspace number 2
+bindsym $mod+3 workspace number 3
+bindsym $mod+4 workspace number 4
+bindsym $mod+5 workspace number 5
+bindsym $mod+6 workspace number 6
+bindsym $mod+7 workspace number 7
+bindsym $mod+8 workspace number 8
+bindsym $mod+9 workspace number 9
+bindsym $mod+0 workspace number 10
+
+bindsym $mod+Shift+1 move container to workspace number 1
+bindsym $mod+Shift+2 move container to workspace number 2
+bindsym $mod+Shift+3 move container to workspace number 3
+bindsym $mod+Shift+4 move container to workspace number 4
+bindsym $mod+Shift+5 move container to workspace number 5
+bindsym $mod+Shift+6 move container to workspace number 6
+bindsym $mod+Shift+7 move container to workspace number 7
+bindsym $mod+Shift+8 move container to workspace number 8
+bindsym $mod+Shift+9 move container to workspace number 9
+bindsym $mod+Shift+0 move container to workspace number 10
+
+# Layout:
+bindsym $mod+b splith
+bindsym $mod+Shift+v splitv
+bindsym $mod+s layout stacking
+bindsym $mod+w layout tabbed
+bindsym $mod+e layout toggle split
+bindsym $mod+f fullscreen
+bindsym $mod+Shift+space floating toggle
+bindsym $mod+space exec ~/.config/sway/toggle-lang.sh
+bindsym $mod+a focus parent
+
+# Scratchpad:
+bindsym $mod+Shift+minus move scratchpad
+bindsym $mod+minus scratchpad show
+
+# Resizing containers:
+mode "resize" {
+    bindsym $left resize shrink width 10px
+    bindsym $down resize grow height 10px
+    bindsym $up resize shrink height 10px
+    bindsym $right resize grow width 10px
+
+    bindsym Left resize shrink width 10px
+    bindsym Down resize grow height 10px
+    bindsym Up resize shrink height 10px
+    bindsym Right resize grow width 10px
+
+    bindsym Return mode "default"
+    bindsym Escape mode "default"
+}
+bindsym $mod+r mode "resize"
+
+# Status Bar:
+bar {
+    swaybar_command waybar
+}
+
+### Media and Brightness Keys
+bindsym --locked --inhibited XF86AudioRaiseVolume exec ~/.config/sway/osd-volume.sh up
+bindsym --locked --inhibited XF86AudioLowerVolume exec ~/.config/sway/osd-volume.sh down
+bindsym --locked --inhibited XF86AudioMute exec ~/.config/sway/toggle-mute.sh speaker
+# External HP keyboard: its volume keys send plain F7/F8/F9, so use them with Super
+bindsym --locked --inhibited $mod+F7 exec ~/.config/sway/toggle-mute.sh speaker
+bindsym --locked --inhibited $mod+F8 exec ~/.config/sway/osd-volume.sh down
+bindsym --locked --inhibited $mod+F9 exec ~/.config/sway/osd-volume.sh up
+
+### Screenshots
+bindsym Print exec ~/.config/sway/screenshot-menu.sh
+bindsym $mod+Shift+s exec ~/.config/sway/screenshot-menu.sh
+bindsym Shift+Print exec ~/.config/sway/screenshot-menu.sh all
+
+### Screen Locker
+bindsym $mod+Escape exec swaylock
+exec mako
+
+### Clipboard History (cliphist + Fuzzel)
+exec wl-paste --type text --watch cliphist store
+exec wl-paste --type image --watch cliphist store
+bindsym $mod+v exec ~/.config/sway/clipboard.sh
+
+# Floating rule for network manager popup
+for_window [app_id="floating-terminal"] floating enable, resize set 750 550, move position center
+for_window [app_id="nm-connection-editor"] floating enable, resize set 700 500, move position center
+
+# Brightness hotkeys (nvidia_wmi_ec_backlight)
+bindsym --locked --inhibited XF86MonBrightnessUp exec ~/.config/sway/osd-brightness.sh up
+bindsym --locked --inhibited XF86MonBrightnessDown exec ~/.config/sway/osd-brightness.sh down
+bindsym $mod+F6 exec ~/.config/sway/osd-brightness.sh up
+bindsym $mod+F5 exec ~/.config/sway/osd-brightness.sh down
+
+# Microphone mute toggle (Fn + F4 / Dedicated Mic key)
+
+# Microphone mute toggle (Fn + F4 or Super + F4)
+bindsym --locked --inhibited XF86AudioMicMute exec ~/.config/sway/toggle-mute.sh mic
+bindsym --locked $mod+F4 exec ~/.config/sway/toggle-mute.sh mic
+
+exec "gnome-keyring-daemon --start --components=pkcs11,secrets,ssh"
+### Quake-style Dropdown Terminal
+# 1. Start a persistent foot terminal with a specific ID in the background
+# 2. Force that specific terminal to float, set its size, and immediately hide it in the scratchpad
+for_window [app_id="quake_term"] floating enable, resize set width 1536 px height 918 px, move position center, move scratchpad
+# 3. Toggle it on/off using F12
+bindsym F12 exec ~/.config/sway/quake-term.sh
+
+### Theme Selector
+bindsym Mod1+t exec ~/.config/sway/theme-selector.sh
+
+### Multi-monitor
+# Display menu (extend / mirror / single screen / primary / refresh)
+bindsym $mod+p exec $display menu
+# Swap which screen is primary (workspaces 1-5 live on primary, 6-10 on secondary)
+bindsym $mod+Ctrl+p exec $display swap
+# Resolution / refresh rate / scale control center
+bindsym $mod+Shift+r exec $display resolution
+
+# Display mode: quick keys without the menu
+set $mode_display "Display: ← → ↑ ↓ extend | m mirror | 1 laptop only | 2 external only | s swap primary | r resolution | 6 60Hz | 4 144Hz | Esc"
+bindsym $mod+Shift+p mode $mode_display
+mode $mode_display {
+    bindsym Right exec $display extend right, mode "default"
+    bindsym Left  exec $display extend left,  mode "default"
+    bindsym Up    exec $display extend above, mode "default"
+    bindsym Down  exec $display extend below, mode "default"
+    bindsym m exec $display mirror,   mode "default"
+    bindsym 1 exec $display laptop,   mode "default"
+    bindsym 2 exec $display external, mode "default"
+    bindsym s exec $display swap,     mode "default"
+    bindsym r exec $display resolution, mode "default"
+    bindsym 6 exec $display refresh 60,  mode "default"
+    bindsym 4 exec $display refresh 144, mode "default"
+    bindsym Return mode "default"
+    bindsym Escape mode "default"
+}
+
+# Jump between screens / send things to the other screen
+bindsym $mod+o exec $display focus-other
+bindsym $mod+Shift+o exec $display window-other
+bindsym $mod+Ctrl+o exec $display workspace-other
+# Trade the workspaces on the two screens (press again to trade back)
+bindsym $mod+Tab exec $display swap-workspaces
+
+# Same, by direction
+bindsym $mod+Ctrl+$left  focus output left
+bindsym $mod+Ctrl+$right focus output right
+bindsym $mod+Ctrl+$up    focus output up
+bindsym $mod+Ctrl+$down  focus output down
+bindsym $mod+Ctrl+Left  focus output left
+bindsym $mod+Ctrl+Right focus output right
+bindsym $mod+Ctrl+Up    focus output up
+bindsym $mod+Ctrl+Down  focus output down
+
+# Move focused window to the screen in that direction (focus follows)
+bindsym $mod+Ctrl+Shift+$left  move container to output left,  focus output left
+bindsym $mod+Ctrl+Shift+$right move container to output right, focus output right
+bindsym $mod+Ctrl+Shift+$up    move container to output up,    focus output up
+bindsym $mod+Ctrl+Shift+$down  move container to output down,  focus output down
+bindsym $mod+Ctrl+Shift+Left  move container to output left,  focus output left
+bindsym $mod+Ctrl+Shift+Right move container to output right, focus output right
+bindsym $mod+Ctrl+Shift+Up    move container to output up,    focus output up
+bindsym $mod+Ctrl+Shift+Down  move container to output down,  focus output down
+
+# Move the whole current workspace to the screen in that direction
+bindsym $mod+Mod1+$left  move workspace to output left
+bindsym $mod+Mod1+$right move workspace to output right
+bindsym $mod+Mod1+$up    move workspace to output up
+bindsym $mod+Mod1+$down  move workspace to output down
+bindsym $mod+Mod1+Left  move workspace to output left
+bindsym $mod+Mod1+Right move workspace to output right
+bindsym $mod+Mod1+Up    move workspace to output up
+bindsym $mod+Mod1+Down  move workspace to output down
+
+# Mirror window (wl-mirror) shouldn't let the screen sleep
+for_window [app_id="at.yrlf.wl_mirror"] inhibit_idle visible
+
+### Battery Monitor
+exec_always killall battery-monitor.sh
+exec_always ~/.config/sway/battery-monitor.sh

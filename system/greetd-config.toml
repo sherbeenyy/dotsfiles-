@@ -1,0 +1,7 @@
+# Copied to /etc/greetd/config.toml by install.sh greeter
+[terminal]
+vt = 1
+
+[default_session]
+command = "tuigreet --time --remember --remember-session --asterisks --sessions /usr/share/wayland-sessions"
+user = "_greetd"

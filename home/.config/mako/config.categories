@@ -1,0 +1,25 @@
+
+# OSD for volume / brightness / mute / keyboard layout (see sway/osd.sh).
+# A pill at the bottom center; the value hint fills it like a progress bar.
+[category=osd]
+format=%b
+anchor=bottom-center
+margin=0,0,90,0
+padding=16,26
+width=260
+height=60
+border-size=1
+border-radius=30
+font=Iosevka Nerd Font Propo Bold 15
+text-alignment=center
+icons=0
+default-timeout=1400
+on-notify=exec true
+
+# Low battery: uses the theme's critical (red) style, stays a while
+[category=battery]
+default-timeout=15000
+
+# Screenshots / copied images: bigger image preview
+[app-name=Screenshot]
+max-icon-size=128

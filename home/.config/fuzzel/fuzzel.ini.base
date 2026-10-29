@@ -1,0 +1,18 @@
+
+[main]
+font=Iosevka Nerd Font Propo:size=13
+prompt="󰍉   "
+icon-theme=Yaru-dark
+icons-enabled=yes
+layer=overlay
+lines=8
+width=38
+horizontal-pad=24
+vertical-pad=20
+inner-pad=14
+line-height=26
+letter-spacing=0.2
+
+[border]
+width=2
+radius=16

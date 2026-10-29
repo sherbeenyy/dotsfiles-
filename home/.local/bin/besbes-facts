@@ -1,0 +1,33 @@
+#!/bin/bash
+# Keep a stock of random facts for the terminal greeting (~/.config/zsh/pet.zsh).
+#   besbes-facts refill [n]   download n new facts (default 25) into the stock
+#
+# Facts come from https://uselessfacts.jsph.pl (free, no account).
+# The greeting takes one fact out of the stock each time, so none repeat.
+
+POOL="${XDG_CACHE_HOME:-$HOME/.cache}/besbes/facts.txt"
+API='https://uselessfacts.jsph.pl/api/v2/facts/random?language=en'
+
+refill() {
+    local n=${1:-25} fact i
+    mkdir -p "$(dirname "$POOL")"
+    # One refill at a time, even if several terminals open together
+    exec 9>"$POOL.lock"
+    flock -n 9 || return 0
+    touch "$POOL"
+    for (( i = 0; i < n; i++ )); do
+        # Facts get printed in the terminal: replace every control character
+        # (C0, DEL, C1) so a bad response can't send escape codes (e.g. OSC 52
+        # clipboard writes), and cap the length.
+        fact=$(curl -fsS --max-time 5 --max-filesize 20000 "$API" 2>/dev/null \
+            | jq -r '(.text // empty) | explode | map(if . < 32 or (. >= 127 and . < 160) then 32 else . end) | implode | .[0:400]' 2>/dev/null \
+            | tr -s ' ' | sed 's/^ *//; s/ *$//')
+        [ -z "$fact" ] && continue
+        grep -qxF -- "$fact" "$POOL" || printf '%s\n' "$fact" >> "$POOL"
+    done
+}
+
+case "$1" in
+    refill) refill "$2" ;;
+    *) sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//' ;;
+esac

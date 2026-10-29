@@ -1,0 +1,48 @@
+# Swaylock - VS Code Dark Modern Theme
+
+daemonize
+ignore-empty-password
+show-failed-attempts
+
+# Wallpaper / Background
+image=~/.local/share/backgrounds/back.jpg
+scaling=fill
+color=1e1e1e
+
+# Ring geometry
+indicator-radius=110
+indicator-thickness=8
+
+# Colors (RRGGBB or RRGGBBAA)
+# Inside circle (idle/typing)
+inside-color=181818dd
+inside-clear-color=181818dd
+inside-caps-lock-color=181818dd
+inside-ver-color=007accdd
+inside-wrong-color=f14c4cdd
+
+# Ring border
+ring-color=2b2b2b
+ring-clear-color=ce9178
+ring-caps-lock-color=dcdcaa
+ring-ver-color=007acc
+ring-wrong-color=f14c4c
+
+# Typing feedback
+key-hl-color=007acc
+bs-hl-color=f14c4c
+separator-color=00000000
+
+# Text colors
+text-color=cccccc
+text-clear-color=ce9178
+text-caps-lock-color=dcdcaa
+text-ver-color=ffffff
+text-wrong-color=ffffff
+
+# Line separators
+line-color=00000000
+line-clear-color=00000000
+line-caps-lock-color=00000000
+line-ver-color=00000000
+line-wrong-color=00000000

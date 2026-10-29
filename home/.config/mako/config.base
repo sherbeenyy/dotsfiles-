@@ -1,0 +1,30 @@
+# Mako - notifications in the top-right corner, under the bar.
+# Colors come from the active theme (themes/<name>/mako-colors).
+
+# Placement & Geometry
+anchor=top-right
+layer=overlay
+margin=10,10,0,0
+padding=14,18
+width=380
+height=160
+border-size=2
+border-radius=14
+max-visible=5
+
+# Icons
+icons=1
+icon-path=/usr/share/icons/Yaru
+max-icon-size=40
+icon-location=left
+
+# Typography
+font=Iosevka Nerd Font Propo 12
+markup=1
+format=<b>%s</b>\n%b
+on-notify=exec pw-play /usr/share/sounds/Yaru/stereo/message-new-instant.oga
+
+# Timing
+default-timeout=5000
+ignore-timeout=0
+

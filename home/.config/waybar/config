@@ -1,0 +1,155 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 34,
+    "margin-top": 6,
+    "margin-left": 10,
+    "margin-right": 10,
+    "spacing": 0,
+    "modules-left": [
+        "sway/workspaces",
+        "sway/mode",
+        "sway/window"
+    ],
+    "modules-center": [
+        "clock"
+    ],
+    "modules-right": [
+        "group/system",
+        "group/controls",
+        "tray"
+    ],
+    "sway/workspaces": {
+        "disable-scroll": true,
+        "all-outputs": true,
+        "format": "{name}"
+    },
+    "sway/mode": {
+        "format": "󰩺  {}"
+    },
+    "sway/window": {
+        "max-length": 45,
+        "format": "{title}",
+        "rewrite": {
+            "(.*) — Mozilla Firefox": "$1",
+            "(.*) - Google Chrome": "$1"
+        }
+    },
+    "clock": {
+        "format": "󰅐  {:%I:%M %p}",
+        "format-alt": "󰃭  {:%A, %d %B %Y}",
+        "tooltip-format": "<big>{:%B %Y}</big>\n<tt><small>{calendar}</small></tt>"
+    },
+    "group/system": {
+        "orientation": "horizontal",
+        "modules": [
+            "cpu",
+            "memory"
+        ]
+    },
+    "cpu": {
+        "interval": 2,
+        "format": "󰻠  {usage}%",
+        "tooltip-format": "CPU Usage: {usage}%\nLoad: {load}\n\nCores:\n{usage_per_core}"
+    },
+    "memory": {
+        "interval": 2,
+        "format": "󰍛  {percentage}%",
+        "tooltip-format": "RAM: {used:0.1f}GiB / {total:0.1f}GiB ({percentage}%)\nSwap: {swapUsed:0.1f}GiB / {swapTotal:0.1f}GiB"
+    },
+    "group/controls": {
+        "orientation": "horizontal",
+        "modules": [
+            "backlight",
+            "pulseaudio",
+            "pulseaudio#mic",
+            "network",
+            "battery"
+        ]
+    },
+    "backlight": {
+        "device": "nvidia_wmi_ec_backlight",
+        "format": "{icon}  {percent}%",
+        "format-icons": [
+            "󰃞",
+            "󰃟",
+            "󰃠"
+        ],
+        "on-scroll-up": "~/.config/sway/osd-brightness.sh up 2",
+        "on-scroll-down": "~/.config/sway/osd-brightness.sh down 2",
+        "tooltip-format": "Brightness {percent}%\nScroll to change",
+        "smooth-scrolling-threshold": 1
+    },
+    "pulseaudio": {
+        "format": "{icon}  {volume}%",
+        "format-muted": "󰝟  muted",
+        "format-icons": {
+            "headphone": "󰋋",
+            "headset": "󰋎",
+            "default": [
+                "󰕿",
+                "󰖀",
+                "󰕾"
+            ]
+        },
+        "on-click": "~/.config/sway/toggle-mute.sh speaker",
+        "on-scroll-up": "~/.config/sway/osd-volume.sh up 2",
+        "on-scroll-down": "~/.config/sway/osd-volume.sh down 2",
+        "tooltip-format": "{desc}\nScroll to change volume, click to mute",
+        "smooth-scrolling-threshold": 1
+    },
+    "network": {
+        "format-wifi": "{icon}  {essid}",
+        "format-ethernet": "󰈀  wired",
+        "format-linked": "󰈀  no IP",
+        "format-disconnected": "󰤭  offline",
+        "format-icons": [
+            "󰤟",
+            "󰤢",
+            "󰤥",
+            "󰤨"
+        ],
+        "tooltip-format": "{ifname}: {ipaddr}/{cidr}",
+        "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ipaddr}/{cidr}\n󰁅 {bandwidthDownBits}  󰁝 {bandwidthUpBits}",
+        "max-length": 25,
+        "on-click": "foot --app-id=floating-terminal nmtui"
+    },
+    "battery": {
+        "states": {
+            "warning": 30,
+            "critical": 15
+        },
+        "format": "{icon}  {capacity}%",
+        "format-charging": "󰂄  {capacity}%",
+        "format-plugged": "󰚥  {capacity}%",
+        "tooltip-format": "{timeTo}\n{power:.1f} W",
+        "format-icons": [
+            "󰁺",
+            "󰁻",
+            "󰁼",
+            "󰁽",
+            "󰁾",
+            "󰁿",
+            "󰂀",
+            "󰂁",
+            "󰂂",
+            "󰁹"
+        ]
+    },
+    "tray": {
+        "icon-size": 15,
+        "spacing": 10
+    },
+    "pulseaudio#mic": {
+        "format": "{format_source}",
+        "format-muted": "{format_source}",
+        "format-bluetooth": "{format_source}",
+        "format-source": "󰍬",
+        "format-source-muted": "󰍭",
+        "tooltip-format": "Mic {source_volume}%\nClick to mute, scroll to change",
+        "on-click": "~/.config/sway/toggle-mute.sh mic",
+        "on-scroll-up": "wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SOURCE@ 2%+",
+        "on-scroll-down": "wpctl set-volume @DEFAULT_AUDIO_SOURCE@ 2%-",
+        "smooth-scrolling-threshold": 1
+    }
+}

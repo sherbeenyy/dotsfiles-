@@ -1,0 +1,17 @@
+[general]
+# Close after copying/saving
+early-exit = true
+initial-tool = "arrow"
+copy-command = "wl-copy"
+# Enter = copy + save, Ctrl+C = copy only, Ctrl+S = save only.
+# The file path comes from --output-filename in screenshot-menu.sh.
+actions-on-enter = ["save-to-clipboard", "save-to-file"]
+save-after-copy = false
+# screenshot-menu.sh sends its own notification (with an image preview)
+disable-notifications = true
+corner-roundness = 12
+annotation-size-factor = 1
+
+[font]
+family = "Iosevka Nerd Font Propo"
+style = "Bold"

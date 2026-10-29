@@ -1,0 +1,5 @@
+# class                 border      bground     text        indicator   child_border
+client.focused          #cba6f7 #cba6f7 #1e1e2e #cba6f7   #cba6f7
+client.focused_inactive #313244 #313244 #cdd6f4 #313244   #313244
+client.unfocused        #45475a #45475a #a6adc8 #45475a   #45475a
+client.urgent           #f38ba8 #f38ba8 #1e1e2e #f38ba8   #f38ba8

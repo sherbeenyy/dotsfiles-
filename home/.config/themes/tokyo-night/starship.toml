@@ -1,0 +1,59 @@
+format = """
+[╭─](accent) $directory$git_branch$git_status$time
+[╰─](accent) ${env_var.PET_OK}${env_var.PET_ERR}${env_var.PET_ZZ}${env_var.PET_HUNGRY}$character"""
+
+palette = "tokyo-night"
+
+[palettes.tokyo-night]
+red = "#f7768e"
+green = "#9ece6a"
+yellow = "#e0af68"
+blue = "#7aa2f7"
+magenta = "#bb9af7"
+cyan = "#7dcfff"
+white = "#a9b1d6"
+black = "#15161e"
+accent = "#7aa2f7"
+
+[directory]
+style = "blue"
+read_only = " "
+truncation_length = 3
+truncate_to_repo = false
+
+[git_branch]
+symbol = " "
+style = "magenta"
+format = "on [$symbol$branch]($style) "
+
+[git_status]
+style = "red"
+format = '([$all_status$ahead_behind]($style) )'
+
+[time]
+disabled = false
+time_format = "%I:%M %p"
+style = "cyan"
+format = "at [$time]($style) "
+
+[character]
+success_symbol = "[❯](accent)"
+error_symbol = "[❯](red)"
+vimcmd_symbol = "[❮](green)"
+
+# Prompt cat (set by ~/.config/zsh/pet.zsh): one of these is set at a time
+[env_var.PET_OK]
+format = "[$env_value]($style) "
+style = "accent"
+
+[env_var.PET_ERR]
+format = "[$env_value]($style) "
+style = "red"
+
+[env_var.PET_ZZ]
+format = "[$env_value]($style) "
+style = "blue"
+
+[env_var.PET_HUNGRY]
+format = "[$env_value]($style) "
+style = "yellow"

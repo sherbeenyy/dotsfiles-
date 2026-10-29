@@ -1,0 +1,207 @@
+@import url("../themes/current/waybar-colors.css");
+
+/* Floating "islands" on a transparent bar. Colors come from the active theme. */
+
+* {
+    border: none;
+    border-radius: 0;
+    font-family: "Iosevka Nerd Font Propo", "Symbols Nerd Font", sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 0;
+}
+
+window#waybar {
+    background: transparent;
+    color: @fg;
+}
+
+/* Hover tooltips: bigger font, high contrast, clean padding */
+tooltip {
+    background: @bg;
+    border: 1px solid alpha(@accent, 0.35);
+    border-radius: 12px;
+    padding: 12px 16px;
+}
+
+tooltip label {
+    font-family: "Iosevka Nerd Font Mono", monospace;
+    font-size: 16px;
+    font-weight: 500;
+    color: @fg;
+}
+
+/* ---------- Islands ---------- */
+#workspaces,
+#mode,
+#window,
+#clock,
+#system,
+#controls,
+#tray {
+    background: @bg-alpha;
+    border: 1px solid alpha(@fg, 0.08);
+    border-radius: 12px;
+    margin: 0 4px;
+    padding: 0 14px;
+}
+
+/* ---------- Left ---------- */
+#workspaces {
+    padding: 0 4px;
+    margin-left: 0;
+}
+
+#workspaces button {
+    color: @inactive;
+    padding: 0 8px;
+    margin: 5px 2px;
+    border-radius: 8px;
+    min-width: 12px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#workspaces button:hover {
+    background: alpha(@fg, 0.08);
+    color: @fg;
+    box-shadow: none;
+}
+
+#workspaces button.visible {
+    color: @fg;
+}
+
+#workspaces button.focused {
+    background: @accent;
+    color: @bg;
+    min-width: 28px;
+}
+
+#workspaces button.urgent {
+    background: @red;
+    color: @bg;
+}
+
+#mode {
+    background: @red;
+    color: @bg;
+    border-color: @red;
+}
+
+#window {
+    color: alpha(@fg, 0.75);
+    font-weight: 500;
+    font-style: italic;
+}
+
+/* No empty island when no window is focused */
+window#waybar.empty #window {
+    background: transparent;
+    border-color: transparent;
+}
+
+/* ---------- Center ---------- */
+#clock {
+    color: @fg;
+    font-weight: 700;
+    padding: 0 18px;
+}
+
+#clock:hover {
+    color: @accent;
+}
+
+/* ---------- Right ---------- */
+#system,
+#controls {
+    padding: 0 6px;
+}
+
+#cpu,
+#memory,
+#backlight,
+#pulseaudio,
+#network,
+#battery {
+    padding: 0 9px;
+}
+
+#cpu         { color: @yellow; }
+#memory      { color: @magenta; }
+#backlight   { color: @yellow; }
+#pulseaudio  { color: @blue; }
+
+/* Scrollable controls: soft highlight that fades in on hover */
+#backlight,
+#pulseaudio {
+    margin: 5px 0;
+    border-radius: 8px;
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
+#backlight:hover {
+    background: alpha(@yellow, 0.15);
+}
+
+#pulseaudio:hover {
+    background: alpha(@blue, 0.15);
+}
+#network     { color: @cyan; }
+#battery     { color: @green; }
+
+/* Speaker and mic are separate modules (#pulseaudio and #pulseaudio.mic):
+   each one dims only for its own mute */
+#pulseaudio.muted:not(.mic) {
+    color: @inactive;
+}
+
+#pulseaudio.mic {
+    color: @green;
+    font-size: 15px;
+}
+
+#pulseaudio.mic.source-muted {
+    color: @red;
+}
+
+#pulseaudio.mic:hover {
+    background: alpha(@green, 0.15);
+}
+
+#network.disconnected {
+    color: @red;
+}
+
+#battery.charging,
+#battery.plugged {
+    color: @cyan;
+}
+
+#battery.warning:not(.charging) {
+    color: @yellow;
+}
+
+#battery.critical:not(.charging) {
+    color: @red;
+    animation: blink 0.8s ease-in-out infinite alternate;
+}
+
+#tray {
+    padding: 0 10px;
+    margin-right: 0;
+}
+
+#tray > .passive {
+    -gtk-icon-effect: dim;
+}
+
+#tray > .needs-attention {
+    -gtk-icon-effect: highlight;
+}
+
+@keyframes blink {
+    to {
+        color: @fg;
+        background: alpha(@red, 0.35);
+    }
+}

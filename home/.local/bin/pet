@@ -1,0 +1,423 @@
+#!/usr/bin/env python3
+"""Max, a terminal dog.
+
+    pet                 play with the dog
+    pet --name NAME     rename it
+
+Click: walk there    p / click the dog: pet    f / right-click: throw a bone    q: quit
+
+Love and food are saved in ~/.local/state/pet/ and drift while you're away.
+The zsh prompt dog (~/.config/zsh/pet.zsh) reads the "fed" file to know when it's hungry.
+"""
+import curses
+import json
+import random
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+
+STATE_DIR = Path.home() / ".local/state/pet"
+STATE = STATE_DIR / "state.json"
+FED = STATE_DIR / "fed"  # touched on every meal; mtime = last fed
+
+FPS = 20
+SLEEP_AFTER = 25  # seconds without interaction
+
+# Pixel-art puppy, facing right; mirrored when walking left. One char = one pixel,
+# drawn two pixels per terminal cell with half blocks.
+# . transparent  B brown  D dark brown  T tan  K black  W white  P pink
+_HEAD = [
+    "......DBBBBB....",
+    ".....DDBBBBBB...",
+    "....DDDDBBBBBB..",
+    "....DDDDBWKBBTT.",
+    ".....DDBBKKBTTTK",
+    ".....DBBBBBBTTP.",
+]
+_EMPTY = "." * 16
+WALK = [
+    _HEAD + [
+        "..DD..BBBBBB....",
+        ".D..BBBBBBBBB...",
+        "..DBBBBBBBBBB...",
+        "...BTTTTTTTBB...",
+        "...BB.BB.BB.BB..",
+        "...KK.KK.KK.KK..",
+    ],
+    # Hop: the whole puppy one pixel up, legs tucked
+    [_EMPTY] + _HEAD[1:] + [
+        "..DD..BBBBBB....",
+        ".D..BBBBBBBBB...",
+        "..DBBBBBBBBBB...",
+        "...BTTTTTTTBB...",
+        "....BBB..BBB....",
+        "....KK....KK....",
+    ],
+]
+SIT = _HEAD + [
+    "......BBBBBBT...",
+    ".....BBBBBBTT...",
+    "..D.BBBBBBBTT...",
+    ".D..BBDBBBBBB...",
+    "..DBBDBBBB.BB...",
+    "...KKKKKK..KK...",
+]
+_EYES_SHUT = ["....DDDDBBBBBTT.", ".....DDBBKKBTTTK"]
+BLINK = SIT[:3] + _EYES_SHUT + SIT[5:]
+# Happy: tongue out, tail wagging (two frames)
+_TONGUE = [".....DBBBBBBTTP.", "......BBBBBBTPP."]
+HAPPY = [
+    SIT[:5] + _TONGUE + ["DD...BBBBBBTT...", "..D.BBBBBBBTT...", "...DBBDBBBBBB...", "....BDBBBB.BB...", "....KKKKKK.KK..."],
+    SIT[:5] + _TONGUE + SIT[7:],
+]
+EAT = SIT[:3] + _EYES_SHUT + _TONGUE + SIT[7:]
+SLEEP = [_EMPTY] * 5 + [
+    ".......DBBBBB...",
+    "......DDBBBBBB..",
+    ".....DDDDBBBBBTT",
+    "..DD.DDDDKKBBTTK",
+    ".D.BBBDDBBBBBTP.",
+    "..DBTTTTBBBBBB..",
+    "...KK.KKK..KKK..",
+]
+DOG_W = len(SIT[0])
+DOG_H = (len(SIT) + 1) // 2  # terminal lines
+
+# Pixel colors: xterm-256 index, and a basic 8-color fallback
+PIXEL_COLORS = {"B": (137, 3), "D": (94, 1), "T": (223, 7), "K": (232, 0), "W": (231, 7), "P": (211, 5)}
+FISH = "o=o"  # a bone
+CLOUD = [" .--. ", "(    )-.", "'-.___.'"]
+
+# curses color pair ids (terminal palette = active theme colors)
+C_DOG, C_HEART, C_FISH, C_STAR, C_DIM, C_TEXT, C_BUBBLE = range(1, 8)
+
+
+def load_state():
+    now = time.time()
+    try:
+        s = json.loads(STATE.read_text())
+    except (OSError, ValueError):
+        s = {"name": "BesBes", "love": 70, "food": 70, "seen": now}
+    # Away time: food drops 1 per 5 min, love 1 per 10 min
+    away_min = max(0, now - s.get("seen", now)) / 60
+    s["food"] = max(0, s["food"] - away_min / 5)
+    s["love"] = max(0, s["love"] - away_min / 10)
+    return s
+
+
+def save_state(s):
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    s["seen"] = time.time()
+    STATE.write_text(json.dumps(s))
+    # Plain copy of the name so the shell greeting can read it without Python
+    (STATE_DIR / "name").write_text(s["name"])
+
+
+def bar(value, width=10):
+    filled = round(value / 100 * width)
+    return "█" * filled + "░" * (width - filled)
+
+
+class Pet:
+    def __init__(self, scr, state):
+        self.scr = scr
+        self.s = state
+        self.x = 5.0
+        self.target = None
+        self.mode = "wander"  # wander, walk, sit, eat, sleep
+        self.mode_until = 0
+        self.facing = 1
+        self.frame = 0
+        self.last_input = time.time()
+        self.bubble, self.bubble_until = "", 0
+        self.hearts = []  # [x, y, ttl]
+        self.zs = []
+        self.fish = []  # [x, y, landed]
+        self.stars = []
+        self.clouds = []
+        self.night = not 6 <= datetime.now().hour < 18
+        self.pairs = {}  # (fg, bg) pixel colors -> curses attr
+        self.resize()
+
+    # ---------- setup ----------
+    def resize(self):
+        self.h, self.w = self.scr.getmaxyx()
+        self.ground = self.h - 3
+        self.x = min(self.x, max(0, self.w - DOG_W - 1))
+        sky = max(1, self.ground - 5)
+        if self.night:
+            self.stars = [[random.randrange(self.w - 1), random.randrange(1, sky), random.random()]
+                          for _ in range(max(8, self.w * sky // 60))]
+        else:
+            self.clouds = [[random.uniform(0, self.w), random.randrange(1, max(2, sky - 2)), random.uniform(0.05, 0.15)]
+                           for _ in range(max(2, self.w // 40))]
+
+    # ---------- helpers ----------
+    def put(self, y, x, text, attr=0):
+        if 0 <= y < self.h and x < self.w:
+            if x < 0:
+                text, x = text[-x:], 0
+            try:
+                self.scr.addstr(y, x, text[: self.w - x - (1 if y == self.h - 1 else 0)], attr)
+            except curses.error:
+                pass
+
+    def say(self, text, secs=2.0):
+        self.bubble, self.bubble_until = text, time.time() + secs
+
+    def head_x(self):
+        """Column of the dog's head (it sits at the front of the sprite)."""
+        return int(self.x) + (DOG_W - 5 if self.facing > 0 else 4)
+
+    def on_dog(self, mx, my):
+        return self.x <= mx < self.x + DOG_W and self.ground - DOG_H < my <= self.ground
+
+    def pixel_attr(self, fg, bg):
+        """Color pair for a foreground/background pixel color (None = transparent)."""
+        key = (fg, bg)
+        if key not in self.pairs:
+            idx = 0 if curses.COLORS >= 256 else 1
+            pid = 20 + len(self.pairs)
+            curses.init_pair(pid, PIXEL_COLORS[fg][idx], PIXEL_COLORS[bg][idx] if bg else -1)
+            self.pairs[key] = curses.color_pair(pid)
+        return self.pairs[key]
+
+    def draw_pixels(self, grid, x, bottom):
+        """Draw a pixel grid with its last row on terminal line `bottom`."""
+        if len(grid) % 2:
+            grid = ["." * len(grid[0])] + grid
+        top = bottom - len(grid) // 2 + 1
+        for line in range(len(grid) // 2):
+            up, down = grid[2 * line], grid[2 * line + 1]
+            for col, (a, b) in enumerate(zip(up, down)):
+                a, b = (a if a != "." else None), (b if b != "." else None)
+                if not a and not b:
+                    continue
+                if a and b:
+                    ch, attr = ("█", self.pixel_attr(a, None)) if a == b else ("▀", self.pixel_attr(a, b))
+                elif a:
+                    ch, attr = "▀", self.pixel_attr(a, None)
+                else:
+                    ch, attr = "▄", self.pixel_attr(b, None)
+                self.put(top + line, x + col, ch, attr)
+
+    # ---------- actions ----------
+    def poke(self):
+        self.last_input = time.time()
+        if self.mode == "sleep":
+            self.mode, self.mode_until = "sit", time.time() + 2
+            self.say("wuf?")
+
+    def pet(self):
+        self.poke()
+        self.s["love"] = min(100, self.s["love"] + 8)
+        self.mode, self.mode_until = "sit", time.time() + 2.5
+        self.say(random.choice(["woof!", "*tail wag*", "arf <3", "*happy panting*"]))
+        for _ in range(4):
+            self.hearts.append([self.head_x() + random.randint(-3, 3), self.ground - DOG_H, random.randint(15, 30)])
+
+    def drop_fish(self, x=None):
+        self.poke()
+        x = random.randrange(2, max(3, self.w - 5)) if x is None else max(0, min(self.w - 4, x))
+        self.fish.append([x, 1.0, False])
+        self.say("!!", 1)
+
+    def walk_to(self, x):
+        self.poke()
+        self.target = max(0, min(self.w - DOG_W - 1, x - DOG_W // 2))
+        self.mode = "walk"
+
+    # ---------- simulation ----------
+    def update(self):
+        now = time.time()
+        self.frame += 1
+        self.s["food"] = max(0, self.s["food"] - 0.2 / (FPS * 60))
+        self.s["love"] = max(0, self.s["love"] - 0.1 / (FPS * 60))
+
+        # Falling bones; landed ones become the walk target
+        for f in self.fish:
+            if not f[2]:
+                f[1] += 0.6
+                if f[1] >= self.ground:
+                    f[1], f[2] = self.ground, True
+        landed = [f for f in self.fish if f[2]]
+        if landed and self.mode not in ("eat",):
+            nearest = min(landed, key=lambda f: abs(f[0] - self.x))
+            self.target = max(0, min(self.w - DOG_W - 1, nearest[0] - DOG_W // 2))
+            if self.mode == "sleep":
+                self.say("*sniff*", 1.5)
+            self.mode = "walk"
+
+        if self.mode == "walk" and self.target is not None:
+            d = self.target - self.x
+            if abs(d) < 0.8:
+                self.x = self.target
+                self.target = None
+                eaten = [f for f in self.fish if f[2] and abs(f[0] - (self.x + DOG_W // 2)) <= DOG_W // 2]
+                if eaten:
+                    self.fish.remove(eaten[0])
+                    self.s["food"] = min(100, self.s["food"] + 25)
+                    self.s["love"] = min(100, self.s["love"] + 3)
+                    FED.parent.mkdir(parents=True, exist_ok=True)
+                    FED.touch()
+                    self.mode, self.mode_until = "eat", now + 1.5
+                    self.say("nom nom", 1.5)
+                else:
+                    self.mode, self.mode_until = "sit", now + random.uniform(2, 5)
+            else:
+                self.facing = 1 if d > 0 else -1
+                self.x += self.facing * min(abs(d), 0.9)
+        elif self.mode in ("sit", "eat") and now > self.mode_until:
+            self.mode = "wander"
+        elif self.mode == "wander":
+            if now - self.last_input > SLEEP_AFTER:
+                self.mode = "sleep"
+                self.say("zzz", 2)
+            elif random.random() < 0.02:
+                self.target = random.uniform(0, max(1, self.w - DOG_W - 1))
+                self.mode = "walk"
+            elif random.random() < 0.01:
+                self.mode, self.mode_until = "sit", now + random.uniform(2, 6)
+                if self.s["food"] < 30:
+                    self.say("hungry... (press f)", 3)
+                elif random.random() < 0.3:
+                    self.say(random.choice(["woof", "*sniff sniff*", "...", "*stretch*", "bark!"]), 1.5)
+
+        if self.mode == "sleep" and self.frame % 25 == 0:
+            self.zs.append([self.head_x(), self.ground - 4, 30])
+
+        for lst in (self.hearts, self.zs):
+            for p in lst:
+                p[1] -= 0.15
+                p[2] -= 1
+                if lst is self.zs:  # Z's drift sideways as they rise
+                    p[0] += 0.1
+            lst[:] = [p for p in lst if p[2] > 0 and p[1] > 0]
+
+        for c in self.clouds:
+            c[0] += c[2]
+            if c[0] > self.w:
+                c[0] = -len(CLOUD[1])
+
+    # ---------- drawing ----------
+    def sprite(self):
+        if self.mode == "sleep":
+            grid = SLEEP
+        elif self.mode == "eat":
+            grid = EAT
+        elif self.mode == "walk":
+            grid = WALK[(self.frame // 4) % 2]
+        elif time.time() < self.bubble_until and self.s["love"] > 50:
+            grid = HAPPY[(self.frame // 3) % 2]  # tail wag
+        else:
+            grid = BLINK if self.frame % 60 < 3 else SIT
+        return grid if self.facing > 0 else [row[::-1] for row in grid]
+
+    def draw(self):
+        scr = self.scr
+        scr.erase()
+        dim = curses.color_pair(C_DIM) | curses.A_DIM
+
+        # Sky
+        for st in self.stars:
+            tw = (self.frame / FPS + st[2] * 6) % 6
+            ch = "*" if tw < 0.3 else ("+" if tw < 1 else ".")
+            self.put(st[1], st[0], ch, curses.color_pair(C_STAR) | (0 if ch != "." else curses.A_DIM))
+        for c in self.clouds:
+            for i, line in enumerate(CLOUD):
+                self.put(c[1] + i, int(c[0]), line, dim)
+        if self.night:
+            self.put(1, self.w - 8, "  _.._", curses.color_pair(C_STAR))
+            self.put(2, self.w - 8, " (  ( ", curses.color_pair(C_STAR))
+            self.put(3, self.w - 8, "  '-.' ", curses.color_pair(C_STAR))
+
+        # Stats
+        s = self.s
+        self.put(0, 1, f" {s['name']} ", curses.color_pair(C_DOG) | curses.A_BOLD)
+        self.put(0, len(s["name"]) + 4, f"♥ {bar(s['love'])}   ", curses.color_pair(C_HEART))
+        self.put(0, len(s["name"]) + 19, f"{FISH} {bar(s['food'])}", curses.color_pair(C_FISH))
+
+        # Ground
+        self.put(self.ground + 1, 0, "▁" * (self.w - 1), dim)
+
+        # Bones
+        for f in self.fish:
+            self.put(int(f[1]), int(f[0]), FISH, curses.color_pair(C_FISH) | curses.A_BOLD)
+
+        # Dog
+        x = int(self.x)
+        self.draw_pixels(self.sprite(), x, self.ground)
+
+        # Speech bubble
+        if time.time() < self.bubble_until:
+            txt = f" {self.bubble} "
+            bx = max(0, min(self.w - len(txt) - 1, self.head_x() - len(txt) // 2))
+            self.put(self.ground - DOG_H, bx, txt, curses.color_pair(C_BUBBLE) | curses.A_REVERSE)
+
+        for hx, hy, _ in self.hearts:
+            self.put(int(hy), int(hx), "♥", curses.color_pair(C_HEART) | curses.A_BOLD)
+        for zx, zy, ttl in self.zs:
+            self.put(int(zy), int(zx), "Z" if ttl > 15 else "z", curses.color_pair(C_TEXT))
+
+        self.put(self.h - 1, 1, "click: walk · p / click dog: pet · f / right-click: bone · q: quit", dim)
+        scr.refresh()
+
+
+def main(scr):
+    curses.curs_set(0)
+    curses.use_default_colors()  # keep the terminal's (transparent) background
+    for pair, color in ((C_DOG, 5), (C_HEART, 1), (C_FISH, 4), (C_STAR, 3), (C_DIM, 7), (C_TEXT, 6), (C_BUBBLE, 5)):
+        curses.init_pair(pair, color, -1)
+    curses.mousemask(curses.ALL_MOUSE_EVENTS)
+    curses.mouseinterval(0)
+    scr.nodelay(True)
+
+    state = load_state()
+    pet = Pet(scr, state)
+    pet.say(f"hi {Path.home().name}!" if state["food"] >= 30 else "hungry... (press f)", 2.5)
+    last_save = time.time()
+
+    try:
+        while True:
+            start = time.time()
+            while (key := scr.getch()) != -1:
+                if key in (ord("q"), 27):
+                    return
+                if key == curses.KEY_RESIZE:
+                    pet.resize()
+                elif key == ord("p"):
+                    pet.pet()
+                elif key == ord("f"):
+                    pet.drop_fish()
+                elif key == curses.KEY_MOUSE:
+                    try:
+                        _, mx, my, _, bstate = curses.getmouse()
+                    except curses.error:
+                        continue
+                    if bstate & (curses.BUTTON3_PRESSED | curses.BUTTON3_CLICKED):
+                        pet.drop_fish(mx)
+                    elif bstate & (curses.BUTTON1_PRESSED | curses.BUTTON1_CLICKED):
+                        pet.pet() if pet.on_dog(mx, my) else pet.walk_to(mx)
+                else:
+                    pet.poke()
+            pet.update()
+            pet.draw()
+            if time.time() - last_save > 30:
+                save_state(state)
+                last_save = time.time()
+            time.sleep(max(0, 1 / FPS - (time.time() - start)))
+    finally:
+        save_state(state)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--name":
+        st = load_state()
+        st["name"] = sys.argv[2]
+        save_state(st)
+        print(f"Your dog is now called {sys.argv[2]}.")
+    elif len(sys.argv) > 1:
+        print(__doc__.strip())
+    else:
+        curses.wrapper(main)

@@ -1,0 +1,22 @@
+background-color=#282828f2
+text-color=#ebdbb2
+border-color=#d79921
+progress-color=over #d79921
+
+[urgency=low]
+background-color=#282828f2
+border-color=#3c3836
+text-color=#a89984
+default-timeout=3000
+
+[urgency=normal]
+background-color=#282828f2
+border-color=#d79921
+text-color=#ebdbb2
+default-timeout=4500
+
+[urgency=critical]
+background-color=#282828f2
+border-color=#cc241d
+text-color=#ebdbb2
+default-timeout=0
