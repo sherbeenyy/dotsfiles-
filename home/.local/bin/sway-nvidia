@@ -1,13 +1,23 @@
 #!/bin/bash
-# Hybrid laptop: Intel iGPU renders and drives the laptop panel, NVIDIA dGPU
-# drives the HDMI port. Sway 1.9 (wlroots 0.17) has no explicit sync, and its
-# GLES renderer doesn't wait for cross-GPU fences, which shows up as
-# glitching/flicker on the NVIDIA-driven external monitor. The Vulkan
-# renderer does wait on those fences.
-export WLR_RENDERER=vulkan
+# Hybrid laptop: Intel iGPU drives the laptop panel, NVIDIA dGPU drives the
+# HDMI port. The GLES renderer doesn't wait for cross-GPU fences, so the HDMI
+# screen glitches on redraws; the Vulkan renderer does. Vulkan gave a black
+# screen with driver 550, so it needs 555+. Back to GLES: touch ~/.config/sway/gles
+[ -e "$HOME/.config/sway/gles" ] || export WLR_RENDERER=vulkan
 
-# Fix invisible cursor on NVIDIA
-export WLR_NO_HARDWARE_CURSORS=1
+# Keep the last session's log; greetd sends sway's output to the system journal
+LOG="${XDG_STATE_HOME:-$HOME/.local/state}/sway.log"
+mkdir -p "${LOG%/*}"
+[ -f "$LOG" ] && mv -f "$LOG" "$LOG.old"
+exec >"$LOG" 2>&1
+
+# Each frame for the NVIDIA-driven HDMI screen is copied from Intel without
+# sync (driver 550). A software cursor redraws and recopies the whole screen on
+# every mouse move, so keep the hardware cursor (overrides ~/.profile).
+# If the cursor goes invisible: WLR_NO_HARDWARE_CURSORS=1
+# Don't set WLR_DRM_NO_MODIFIERS: NVIDIA can't take linear copy buffers (black screen).
+unset WLR_NO_HARDWARE_CURSORS
+
 export XDG_SESSION_TYPE=wayland
 # User-installed tools (satty, nvidia-run) for keybindings and apps started by sway
 export PATH="$HOME/.local/bin:$PATH"
@@ -18,16 +28,26 @@ unset WLR_DRM_NO_ATOMIC
 # Run a single app on the dGPU with: nvidia-run <app>
 unset GBM_BACKEND __GLX_VENDOR_LIBRARY_NAME LIBVA_DRIVER_NAME
 
-# Pin GPU order (Intel primary) by PCI address; cardN numbers can change between boots.
+# Pin GPU order by PCI address; cardN numbers can change between boots.
+# The first GPU renders. Intel by default: driver 550 has no explicit sync, so
+# the NVIDIA-driven HDMI screen can glitch, but with NVIDIA rendering the laptop
+# panel can't be lit at all. SWAY_GPU=nvidia suits using the external screen only.
 intel=$(readlink -f /dev/dri/by-path/pci-0000:00:02.0-card)
 nvidia=$(readlink -f /dev/dri/by-path/pci-0000:01:00.0-card)
-[ -e "$intel" ] && [ -e "$nvidia" ] && export WLR_DRM_DEVICES="$intel:$nvidia"
+if [ -e "$intel" ] && [ -e "$nvidia" ]; then
+    if [ "$SWAY_GPU" = nvidia ]; then
+        export WLR_DRM_DEVICES="$nvidia:$intel"
+    else
+        export WLR_DRM_DEVICES="$intel:$nvidia"
+    fi
+    echo "sway-nvidia: rendering on ${SWAY_GPU:-intel} ($WLR_DRM_DEVICES)"
+fi
 
-# If sway dies right away (e.g. Vulkan renderer fails), retry with the default renderer
+# If sway dies right away with a custom renderer, retry with the default one
 start=$(date +%s)
 sway --unsupported-gpu "$@"
 rc=$?
-if [ $rc -ne 0 ] && [ $(( $(date +%s) - start )) -lt 10 ]; then
+if [ $rc -ne 0 ] && [ -n "$WLR_RENDERER" ] && [ $(( $(date +%s) - start )) -lt 10 ]; then
     unset WLR_RENDERER
     exec sway --unsupported-gpu "$@"
 fi

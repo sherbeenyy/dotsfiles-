@@ -18,6 +18,12 @@ with 11 switchable themes (`Alt+T` or `theme <name>`).
 3. Put secrets / machine-only stuff in `~/.zshrc.local` (sourced by `.zshrc`, never committed).
 4. Reboot and choose **Sway (NVIDIA Optimized)** at the login screen.
 
+### Already have Debian with GNOME?
+
+Just run `./install.sh` from a terminal in GNOME. GNOME isn't touched: GDM gets replaced by
+greetd as the login screen, but GNOME is still in its session list as a fallback. Symlinks
+point into this repo folder, so don't move or delete it afterwards.
+
 Steps can be run one at a time: `./install.sh links`, `./install.sh fonts`, … (see the top of `install.sh`).
 
 ## Layout

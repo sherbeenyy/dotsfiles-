@@ -112,7 +112,7 @@
         "tooltip-format": "{ifname}: {ipaddr}/{cidr}",
         "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ipaddr}/{cidr}\n󰁅 {bandwidthDownBits}  󰁝 {bandwidthUpBits}",
         "max-length": 25,
-        "on-click": "foot --app-id=floating-terminal nmtui"
+        "on-click": "foot --app-id=floating-terminal --window-size-pixels=750x550 nmtui"
     },
     "battery": {
         "states": {

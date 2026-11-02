@@ -9,9 +9,10 @@
 #   ./install.sh theme      apply the theme and GTK settings
 #   ./install.sh session    "Sway (NVIDIA Optimized)" login session
 #   ./install.sh nvidia     NVIDIA driver (enables contrib/non-free)
+#   ./install.sh nvidia-repo  newer NVIDIA driver from NVIDIA's own apt repo (not run by default)
 #   ./install.sh greeter    greetd + tuigreet login screen
 #
-# Every step is safe to re-run.
+# Every step is safe to re-run. GNOME stays installed and selectable at login.
 
 set -uo pipefail
 
@@ -26,20 +27,25 @@ ask()  { read -rp "$1 [y/N] " r; [[ $r == [yY]* ]]; }
 APT_PACKAGES=(
     # sway desktop
     sway swaybg swaylock swayidle waybar foot fuzzel mako-notifier libnotify-bin
-    wl-clipboard cliphist grim slurp wl-mirror brightnessctl jq psmisc
-    xdg-desktop-portal-wlr xdg-desktop-portal-gtk gnome-keyring
+    wl-clipboard cliphist grim slurp wl-mirror brightnessctl jq psmisc xwayland
+    xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk
+    gnome-keyring libpam-gnome-keyring
     dconf-gsettings-backend libglib2.0-bin
-    # audio / network
-    pipewire pipewire-pulse pipewire-audio wireplumber
-    network-manager network-manager-gnome
-    # look
-    yaru-theme-gtk yaru-theme-icon adwaita-icon-theme
+    # clipboard.sh image previews
+    python3-gi gir1.2-gdkpixbuf-2.0
+    # audio / network / bluetooth
+    pipewire pipewire-pulse pipewire-audio pipewire-bin wireplumber
+    network-manager network-manager-gnome wpasupplicant bluez
+    # look (yaru-theme-sound: mako's notification sound)
+    yaru-theme-gtk yaru-theme-icon yaru-theme-sound adwaita-icon-theme
     fonts-noto-core fonts-noto-color-emoji fontconfig
     # shell & terminal tools
     zsh tmux fzf ripgrep zoxide btop kitty gh git curl wget unzip xz-utils
-    python3 python3-rich pipx
-    # tools that may or may not be packaged; fall back to GitHub releases below
-    satty hx
+    python3 python3-rich pipx starship hx
+    # apps that came with the GNOME install; listed so removing GNOME keeps them
+    firefox-esr xdg-user-dirs xdg-utils
+    # not packaged in Debian 13, installed from GitHub releases below
+    satty
 )
 
 # Download the newest GitHub release asset whose name matches a regex, print the file path
@@ -63,11 +69,6 @@ step_packages() {
     [ ${#missing[@]} -gt 0 ] && warn "not in apt, handled below if possible: ${missing[*]}"
 
     mkdir -p "$BIN"
-
-    if ! command -v starship >/dev/null; then
-        say "starship"
-        curl -fsSL https://starship.rs/install.sh | sh -s -- -y
-    fi
 
     if ! command -v satty >/dev/null; then
         say "satty (screenshot editor)"
@@ -182,7 +183,12 @@ step_nvidia() {
         sudo sed -i.bak -E '/^deb/{/contrib/!s/ main/ main contrib/; / non-free( |$)/!s/$/ non-free/}' /etc/apt/sources.list
     fi
     sudo apt-get update
-    sudo apt-get install -y linux-headers-amd64 nvidia-driver firmware-misc-nonfree nvidia-suspend-common
+    sudo apt-get install -y linux-headers-amd64 nvidia-driver firmware-misc-nonfree
+    # Needed for NVreg_PreserveVideoMemoryAllocations (suspend/resume); not packaged in every release
+    if apt-cache show nvidia-suspend-common >/dev/null 2>&1; then
+        sudo apt-get install -y nvidia-suspend-common
+        sudo systemctl enable nvidia-suspend.service nvidia-hibernate.service nvidia-resume.service
+    fi
     sudo install -m644 "$DOTFILES/system/nvidia.conf" /etc/modprobe.d/nvidia-rice.conf
     sudo update-initramfs -u
     warn "reboot to load the NVIDIA driver"
@@ -190,18 +196,49 @@ step_nvidia() {
 
 step_greeter() {
     say "greetd login screen"
-    ask "Use greetd + tuigreet as the login screen (replaces any other display manager)?" || return 0
+    ask "Use greetd + tuigreet as the login screen instead of GDM (GNOME stays installed)?" || return 0
     sudo apt-get install -y greetd tuigreet
-    sudo install -m644 "$DOTFILES/system/greetd-config.toml" /etc/greetd/config.toml
-    for dm in gdm3 sddm lightdm; do
-        systemctl is-enabled "$dm" >/dev/null 2>&1 && sudo systemctl disable "$dm"
-    done
-    sudo systemctl enable greetd
+    sed "s|@BIN@|$BIN|g" "$DOTFILES/system/greetd-config.toml" | sudo tee /etc/greetd/config.toml >/dev/null
+    sudo chmod 644 /etc/greetd/config.toml
+    # display-manager.service points at gdm3 (Debian links it by hand, so `disable gdm3`
+    # does nothing); --force repoints that alias to greetd. GDM stays installed.
+    sudo systemctl enable --force greetd
+    echo /usr/sbin/greetd | sudo tee /etc/X11/default-display-manager >/dev/null
+    echo "  GNOME is still listed in the login menu as a fallback."
+    echo "  To go back to GDM: sudo ln -sf /lib/systemd/system/gdm3.service /etc/systemd/system/display-manager.service"
+}
+
+# Debian 13 ships driver 550, which has no explicit sync: on a hybrid laptop the
+# NVIDIA-driven HDMI screen glitches whenever sway redraws. 555+ fixes that, so
+# take the driver from NVIDIA's repo, held on one branch (bump NV_BRANCH to move).
+NV_BRANCH=615
+NV_REPO=https://developer.download.nvidia.com/compute/cuda/repos/debian13/x86_64
+step_nvidia_repo() {
+    say "NVIDIA $NV_BRANCH driver from NVIDIA's repo"
+    ask "Replace Debian's NVIDIA driver with $NV_BRANCH from NVIDIA's apt repo?" || return 0
+    local tmp
+    tmp=$(mktemp -d)
+    curl -fsSL -o "$tmp/cuda-keyring.deb" "$NV_REPO/cuda-keyring_1.1-1_all.deb" || { warn "download failed"; return 1; }
+    sudo dpkg -i "$tmp/cuda-keyring.deb"
+    rm -rf "$tmp"
+    sudo apt-get update
+    # Package names overlap with Debian's; remove Debian's set so none of it lingers
+    sudo apt-get purge -y '~nnvidia' '~nlibcuda' '~nlibnvcuvid'
+    if ! sudo apt-get install -y "nvidia-driver-pinning-$NV_BRANCH" nvidia-open linux-headers-amd64; then
+        warn "install failed; back to Debian's driver: sudo apt-get purge cuda-keyring && sudo apt-get update && sudo apt-get install nvidia-driver"
+        return 1
+    fi
+    # No nvidia-suspend-common here: in NVIDIA's repo it's a dummy that conflicts
+    # with nvidia-driver, so installing it removes the driver
+    sudo install -m644 "$DOTFILES/system/nvidia.conf" /etc/modprobe.d/nvidia-rice.conf
+    sudo update-initramfs -u
+    warn "reboot to load the NVIDIA $NV_BRANCH driver"
 }
 
 ALL=(packages fonts shell links theme session nvidia greeter)
 steps=("$@"); [ ${#steps[@]} -eq 0 ] && steps=("${ALL[@]}")
 for s in "${steps[@]}"; do
-    if declare -f "step_$s" >/dev/null; then "step_$s"; else warn "unknown step: $s"; exit 1; fi
+    f="step_${s//-/_}"
+    if declare -f "$f" >/dev/null; then "$f"; else warn "unknown step: $s"; exit 1; fi
 done
 say "done — log out and pick \"Sway (NVIDIA Optimized)\""

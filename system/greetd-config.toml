@@ -1,7 +1,8 @@
 # Copied to /etc/greetd/config.toml by install.sh greeter
 [terminal]
-vt = 1
+vt = 7
 
 [default_session]
-command = "tuigreet --time --remember --remember-session --asterisks --sessions /usr/share/wayland-sessions"
+# Always starts sway (@BIN@ is filled in by install.sh); F3 in tuigreet picks another session
+command = "tuigreet --time --remember --asterisks --cmd @BIN@/sway-nvidia --sessions /usr/share/wayland-sessions"
 user = "_greetd"

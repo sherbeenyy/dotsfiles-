@@ -31,12 +31,13 @@ OUTPUTS=$(swaymsg -t get_outputs -r)
 LAPTOP=$(jq -r '[.[] | select(.name | test("^(eDP|LVDS|DSI)"))][0].name // empty' <<<"$OUTPUTS")
 EXTERNAL=$(jq -r '[.[] | select(.name | test("^(eDP|LVDS|DSI)") | not)][0].name // empty' <<<"$OUTPUTS")
 
-# Highest resolution, then highest refresh ("60" caps refresh at ~60Hz)
+# Highest resolution, then highest refresh ("60" caps refresh at ~60Hz;
+# "preferred" takes the monitor's EDID preferred mode, listed first)
 best_mode() {
     jq -r --arg o "$1" --arg hz "$2" '
         .[] | select(.name == $o) | .modes
         | (if $hz == "60" then map(select(.refresh < 61000)) else . end)
-        | max_by([.width * .height, .refresh])
+        | if $hz == "preferred" then .[0] else max_by([.width * .height, .refresh]) end
         | if . == null then empty else "\(.width)x\(.height)@\(.refresh / 1000)Hz" end' <<<"$OUTPUTS"
 }
 
@@ -72,6 +73,8 @@ assign_workspaces() {
         mirror) s= ;;
     esac
     [ -z "$EXTERNAL" ] && p=$LAPTOP s=
+    # No outputs yet (sway still starting): an empty name would break the config
+    [ -z "$p" ] && return
 
     # Assignments go in an included file + reload: runtime "workspace N output"
     # commands stack up instead of replacing, so sway would keep old outputs.
@@ -123,7 +126,7 @@ apply() {
         return
     fi
 
-    em=$(mode_for "$EXTERNAL" max) es=$(scale_for "$EXTERNAL")
+    em=$(mode_for "$EXTERNAL" preferred) es=$(scale_for "$EXTERNAL")
     read -r lw lh <<<"$(logical "$lm" "$ls")"
     read -r ew eh <<<"$(logical "$em" "$es")"
 

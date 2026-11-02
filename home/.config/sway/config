@@ -162,7 +162,7 @@ exec wl-paste --type image --watch cliphist store
 bindsym $mod+v exec ~/.config/sway/clipboard.sh
 
 # Floating rule for network manager popup
-for_window [app_id="floating-terminal"] floating enable, resize set 750 550, move position center
+for_window [app_id="floating-terminal"] floating enable, move position center
 for_window [app_id="nm-connection-editor"] floating enable, resize set 700 500, move position center
 
 # Brightness hotkeys (nvidia_wmi_ec_backlight)

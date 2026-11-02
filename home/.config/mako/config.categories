@@ -4,7 +4,7 @@
 [category=osd]
 format=%b
 anchor=bottom-center
-margin=0,0,90,0
+outer-margin=0,0,90,0
 padding=16,26
 width=260
 height=60
