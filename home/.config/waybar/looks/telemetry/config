@@ -1,10 +1,10 @@
 {
     "layer": "top",
     "position": "top",
-    "height": 34,
-    "margin-top": 6,
-    "margin-left": 10,
-    "margin-right": 10,
+    "height": 30,
+    "margin-top": 0,
+    "margin-left": 0,
+    "margin-right": 0,
     "spacing": 0,
     "modules-left": [
         "custom/debian",
@@ -16,17 +16,16 @@
         "clock"
     ],
     "modules-right": [
-        "image#cpu",
-        "image#gpu",
-        "image#mem",
-        "image#net",
-        "group/brightness",
-        "group/audio",
+        "custom/cpu",
+        "custom/gpu",
+        "custom/mem",
+        "custom/net",
+        "backlight",
+        "pulseaudio",
         "pulseaudio#mic",
         "network",
         "battery",
         "tray",
-        "custom/power",
         "custom/telemetryd"
     ],
     "custom/telemetryd": {
@@ -63,79 +62,30 @@
         "tooltip-format": "{player}\n{dynamic}"
     },
     "clock": {
-        "format": "{:%I:%M %p}",
-        "format-alt": "{:%A, %d %B %Y}",
+        "format": "{:%a %d %b   %I:%M %p}",
         "tooltip-format": "<big>{:%B %Y}</big>\n<tt><small>{calendar}</small></tt>"
-    },
-    "image#cpu": {
-        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-telemetry/cpu.meta\" 2>/dev/null",
-        "size": 92,
-        "interval": 1,
-        "on-click": "foot --app-id=floating-terminal --window-size-pixels=1100x700 btop"
-    },
-    "image#gpu": {
-        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-telemetry/gpu.meta\" 2>/dev/null",
-        "size": 92,
-        "interval": 1
-    },
-    "image#mem": {
-        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-telemetry/mem.meta\" 2>/dev/null",
-        "size": 92,
-        "interval": 1,
-        "on-click": "foot --app-id=floating-terminal --window-size-pixels=1100x700 btop"
-    },
-    "image#net": {
-        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-telemetry/net.meta\" 2>/dev/null",
-        "size": 92,
-        "interval": 1,
-        "on-click": "foot --app-id=floating-terminal --window-size-pixels=750x550 nmtui"
-    },
-    "group/brightness": {
-        "orientation": "inherit",
-        "drawer": {
-            "transition-duration": 250,
-            "transition-left-to-right": false,
-            "children-class": "revealed"
-        },
-        "modules": [
-            "backlight",
-            "backlight/slider"
-        ]
     },
     "backlight": {
         "device": "nvidia_wmi_ec_backlight",
-        "format": "{icon}",
+        "format": "{icon} {percent}%",
+        "on-scroll-up": "brightnessctl -q -d nvidia_wmi_ec_backlight set +2%",
+        "on-scroll-down": "brightnessctl -q -d nvidia_wmi_ec_backlight set 2%-",
+        "tooltip-format": "Brightness {percent}%\nScroll to change",
+        "smooth-scrolling-threshold": 1,
         "format-icons": [
             "󰃞",
             "󰃟",
             "󰃠"
-        ],
-        "on-scroll-up": "~/.config/sway/osd-brightness.sh up 2",
-        "on-scroll-down": "~/.config/sway/osd-brightness.sh down 2",
-        "tooltip-format": "Brightness {percent}%\nHover for the slider, or scroll",
-        "smooth-scrolling-threshold": 1
-    },
-    "backlight/slider": {
-        "device": "nvidia_wmi_ec_backlight",
-        "min": 5,
-        "max": 100,
-        "orientation": "horizontal"
-    },
-    "group/audio": {
-        "orientation": "inherit",
-        "drawer": {
-            "transition-duration": 250,
-            "transition-left-to-right": false,
-            "children-class": "revealed"
-        },
-        "modules": [
-            "pulseaudio",
-            "pulseaudio/slider"
         ]
     },
     "pulseaudio": {
-        "format": "{icon}",
-        "format-muted": "󰝟",
+        "format": "{icon} {volume}%",
+        "format-muted": "󰝟 muted",
+        "on-click": "~/.config/sway/toggle-mute.sh speaker",
+        "on-scroll-up": "wpctl set-mute @DEFAULT_AUDIO_SINK@ 0; wpctl set-volume -l 1.5 @DEFAULT_AUDIO_SINK@ 2%+",
+        "on-scroll-down": "wpctl set-volume @DEFAULT_AUDIO_SINK@ 2%-",
+        "tooltip-format": "{desc}  {volume}%\nScroll to change, click to mute",
+        "smooth-scrolling-threshold": 1,
         "format-icons": {
             "headphone": "󰋋",
             "headset": "󰋎",
@@ -144,17 +94,7 @@
                 "󰖀",
                 "󰕾"
             ]
-        },
-        "on-click": "~/.config/sway/toggle-mute.sh speaker",
-        "on-scroll-up": "~/.config/sway/osd-volume.sh up 2",
-        "on-scroll-down": "~/.config/sway/osd-volume.sh down 2",
-        "tooltip-format": "{desc}  {volume}%\nHover for the slider, click to mute, or scroll",
-        "smooth-scrolling-threshold": 1
-    },
-    "pulseaudio/slider": {
-        "min": 0,
-        "max": 100,
-        "orientation": "horizontal"
+        }
     },
     "pulseaudio#mic": {
         "format": "{format_source}",
@@ -173,24 +113,19 @@
         "format-ethernet": "󰈀",
         "format-linked": "󰈀",
         "format-disconnected": "󰤭",
+        "tooltip-format": "{ifname}: {ipaddr}/{cidr}",
+        "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ipaddr}/{cidr}",
+        "on-click": "foot --app-id=floating-terminal --window-size-pixels=750x550 nmtui",
         "format-icons": [
             "󰤟",
             "󰤢",
             "󰤥",
             "󰤨"
-        ],
-        "tooltip-format": "{ifname}: {ipaddr}/{cidr}",
-        "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ipaddr}/{cidr}",
-        "on-click": "foot --app-id=floating-terminal --window-size-pixels=750x550 nmtui"
+        ]
     },
     "tray": {
         "icon-size": 15,
         "spacing": 10
-    },
-    "custom/power": {
-        "format": "󰐥",
-        "tooltip-format": "Power menu",
-        "on-click": "~/.config/sway/power-menu.sh"
     },
     "battery": {
         "states": {
@@ -213,5 +148,28 @@
             "󰂂",
             "󰁹"
         ]
+    },
+    "custom/cpu": {
+        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-telemetry/cpu.json\" 2>/dev/null",
+        "return-type": "json",
+        "interval": 1,
+        "on-click": "foot --app-id=floating-terminal --window-size-chars=100x25 btop"
+    },
+    "custom/gpu": {
+        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-telemetry/gpu.json\" 2>/dev/null",
+        "return-type": "json",
+        "interval": 1
+    },
+    "custom/mem": {
+        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-telemetry/mem.json\" 2>/dev/null",
+        "return-type": "json",
+        "interval": 1,
+        "on-click": "foot --app-id=floating-terminal --window-size-chars=100x25 btop"
+    },
+    "custom/net": {
+        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-telemetry/net.json\" 2>/dev/null",
+        "return-type": "json",
+        "interval": 1,
+        "on-click": "foot --app-id=floating-terminal --window-size-pixels=750x550 nmtui"
     }
 }

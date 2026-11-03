@@ -1,27 +1,27 @@
 @import url("../themes/current/waybar-colors.css");
 
-/* "Telemetry": one plain dark bar, one accent color, live stats drawn by telemetryd.py.
-   No endless CSS animations here, because those redraw the bar nonstop and cost battery. */
+/* "Telemetry": one flat bar from edge to edge. Icons and live percentages in the bar,
+   with the details and history graphs in the hover popups written by telemetryd.py. */
 
 * {
     border: none;
     border-radius: 0;
     font-family: "Iosevka Nerd Font Propo", "Symbols Nerd Font", sans-serif;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     min-height: 0;
 }
 
 window#waybar {
     color: @fg;
-    border-radius: 12px;
-    background: alpha(@bg, 0.85);
+    background: alpha(@bg, 0.95);
+    border-bottom: 1px solid alpha(@fg, 0.10);
 }
 
 tooltip {
     background: @bg;
     border: 1px solid alpha(@fg, 0.15);
-    border-radius: 10px;
+    border-radius: 8px;
 }
 
 tooltip label {
@@ -34,15 +34,15 @@ tooltip label {
 /* ---------- Left ---------- */
 #custom-debian {
     color: @accent;
-    font-size: 17px;
-    padding: 0 12px 0 14px;
+    font-size: 15px;
+    padding: 0 12px;
 }
 
 #workspaces button {
     color: alpha(@fg, 0.40);
-    padding: 0 8px;
+    padding: 0 10px;
     min-width: 10px;
-    transition: color 0.2s ease;
+    transition: color 0.15s ease;
 }
 
 #workspaces button:hover {
@@ -55,7 +55,7 @@ tooltip label {
     color: alpha(@fg, 0.75);
 }
 
-/* The current workspace: accent number on a small underline */
+/* The current workspace: accent number with a line along the bar's bottom edge */
 #workspaces button.focused {
     color: @accent;
     font-weight: 800;
@@ -75,7 +75,7 @@ tooltip label {
 /* ---------- Center ---------- */
 #clock {
     color: @fg;
-    font-weight: 800;
+    font-weight: 700;
     padding: 0 14px;
 }
 
@@ -85,44 +85,55 @@ tooltip label {
     padding: 0 14px;
 }
 
-/* ---------- Live stats ---------- */
-#image {
-    margin: 0 7px;
+/* ---------- Stats ---------- */
+#custom-cpu,
+#custom-gpu,
+#custom-mem,
+#custom-net {
+    color: alpha(@fg, 0.92);
+    padding: 0 8px;
+    transition: color 0.15s ease;
 }
 
-/* ---------- Controls: quiet until hovered ---------- */
+#custom-cpu:hover,
+#custom-gpu:hover,
+#custom-mem:hover,
+#custom-net:hover {
+    color: @accent;
+}
+
+#custom-cpu.warning,
+#custom-gpu.warning,
+#custom-mem.warning {
+    color: @yellow;
+}
+
+#custom-cpu.critical,
+#custom-gpu.critical,
+#custom-mem.critical {
+    color: @red;
+}
+
+/* ---------- Controls ---------- */
 #backlight,
 #pulseaudio,
 #network,
-#battery,
-#custom-power {
-    color: alpha(@fg, 0.70);
-    padding: 0 7px;
-    transition: color 0.2s ease;
+#battery {
+    color: alpha(@fg, 0.92);
+    padding: 0 8px;
 }
 
-#backlight { margin-left: 10px; }
-
-#backlight:hover,
-#pulseaudio:hover,
-#network:hover,
-#custom-power:hover {
-    color: @accent;
+/* A thin line between the stats and the controls */
+#backlight {
+    margin-left: 8px;
+    padding-left: 16px;
+    border-left: 1px solid alpha(@fg, 0.12);
 }
 
 #pulseaudio.muted:not(.mic),
 #pulseaudio.mic.source-muted,
 #network.disconnected {
     color: @red;
-}
-
-#battery {
-    color: @fg;
-}
-
-#battery.charging,
-#battery.plugged {
-    color: @accent;
 }
 
 #battery.warning:not(.charging) {
@@ -133,40 +144,14 @@ tooltip label {
     color: @red;
 }
 
-#custom-power {
-    padding: 0 14px 0 8px;
+#battery {
+    padding-right: 14px;
 }
 
 #tray {
-    padding: 0 8px;
+    padding: 0 14px 0 4px;
 }
 
 #tray > .needs-attention {
     -gtk-icon-effect: highlight;
-}
-
-/* Sliders that open when you hover over the icon next to them */
-#backlight-slider slider,
-#pulseaudio-slider slider {
-    min-height: 0;
-    min-width: 0;
-    opacity: 0;
-    background-image: none;
-    border: none;
-    box-shadow: none;
-}
-
-#backlight-slider trough,
-#pulseaudio-slider trough {
-    min-height: 4px;
-    min-width: 80px;
-    margin: 0 6px;
-    border-radius: 2px;
-    background: alpha(@fg, 0.15);
-}
-
-#backlight-slider highlight,
-#pulseaudio-slider highlight {
-    border-radius: 2px;
-    background: @accent;
 }

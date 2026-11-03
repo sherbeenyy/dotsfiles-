@@ -1,12 +1,13 @@
 #!/usr/bin/python3
-"""Draws the live stats for the "telemetry" waybar look: icon, number, thin graph.
+"""Provides the stat icons and hover popups for the "telemetry" waybar look.
 
-Once a second it renders one small PNG per stat, plus a .meta file holding that
-stat's path and tooltip. Waybar's image modules read the .meta files.
+The bar shows icons and live percentages. Once a second this writes one JSON file per
+stat, holding that, its popup text (numbers plus a small history graph) and a warning class
+when the stat is high. Waybar's custom modules read those files.
 
-Waybar starts one copy per bar. A lock keeps a single copy drawing; the others
-wait on it and take over if the drawing copy goes away. Every copy exits with
-its bar. Colors come from the active theme.
+Waybar starts one copy per bar. A lock keeps a single copy writing; the others wait
+on it and take over if the writing copy goes away. Every copy exits with its bar.
+Colors come from the active theme.
 """
 import ctypes
 import fcntl
@@ -24,103 +25,34 @@ import time
 from collections import deque
 from pathlib import Path
 
-import cairo
-
 OUT = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "waybar-telemetry"
 THEME = Path.home() / ".config/themes/current/waybar-colors.css"
-FONT = "Iosevka Nerd Font"
-WIDTH, HEIGHT = 92, 24  # keep "size" in config equal to WIDTH
-GRAPH_X = 48            # the graph takes the space from here to the right edge
-SAMPLES = 22            # seconds of history in the graph
+SAMPLES = 30            # seconds of history in the popup graph
 GPU_POLL_SECONDS = 5
+BLOCKS = "▁▂▃▄▅▆▇█"
 
 C = {}
 
 
 def load_theme():
-    for name, value in re.findall(r"@define-color\s+([\w-]+)\s+#([0-9a-fA-F]{6})", THEME.read_text()):
-        C[name] = tuple(int(value[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    C.update(re.findall(r"@define-color\s+([\w-]+)\s+(#[0-9a-fA-F]{6})", THEME.read_text()))
 
 
-def status_color(pct):
-    """The accent normally. Yellow or red only when something is actually high."""
-    return C["red"] if pct >= 90 else C["yellow"] if pct >= 75 else C["accent"]
+# ---------------------------------------------------------------- output
+def level_class(pct):
+    return "critical" if pct >= 90 else "warning" if pct >= 75 else ""
 
 
-# ---------------------------------------------------------------- drawing
-def line(ctx, values, color, alpha=1.0, fill=True):
-    """Thin smooth line over a soft fade. Values run from 0 to 1."""
-    values = list(values)
-    if len(values) < 2:
-        return
-    top, bottom = 5.0, HEIGHT - 5.0
-    step = (WIDTH - GRAPH_X - 2) / (SAMPLES - 1)
-    start = WIDTH - 2 - step * (len(values) - 1)
-    points = [(start + i * step, bottom - max(0.0, min(v, 1.0)) * (bottom - top))
-              for i, v in enumerate(values)]
-
-    def trace():
-        ctx.move_to(*points[0])
-        for (x0, y0), (x1, y1) in zip(points, points[1:]):
-            middle = (x0 + x1) / 2
-            ctx.curve_to(middle, y0, middle, y1, x1, y1)
-
-    if fill:
-        trace()
-        ctx.line_to(points[-1][0], bottom)
-        ctx.line_to(points[0][0], bottom)
-        ctx.close_path()
-        fade = cairo.LinearGradient(0, top, 0, bottom)
-        fade.add_color_stop_rgba(0, *color, 0.30)
-        fade.add_color_stop_rgba(1, *color, 0.0)
-        ctx.set_source(fade)
-        ctx.fill()
-    trace()
-    ctx.set_source_rgba(*color, alpha)
-    ctx.set_line_width(1.4)
-    ctx.set_line_cap(cairo.LINE_CAP_ROUND)
-    ctx.set_line_join(cairo.LINE_JOIN_ROUND)
-    ctx.stroke()
+def publish(name, icon, tooltip, css_class=""):
+    tmp = OUT / f".{name}.json"
+    tmp.write_text(json.dumps({"text": icon, "tooltip": tooltip, "class": css_class}) + "\n")
+    os.replace(tmp, OUT / f"{name}.json")
 
 
-def tile(icon, value, color):
-    """A new image with the icon and number in place. The caller adds the graph."""
-    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, WIDTH, HEIGHT)
-    ctx = cairo.Context(surface)
-    options = cairo.FontOptions()
-    options.set_antialias(cairo.ANTIALIAS_GRAY)
-    options.set_hint_style(cairo.HINT_STYLE_SLIGHT)
-    options.set_hint_metrics(cairo.HINT_METRICS_ON)
-    ctx.set_font_options(options)
-    ctx.select_font_face(FONT, cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-
-    baseline = HEIGHT / 2 + 4.5
-    ctx.set_font_size(16)
-    ctx.move_to(0, baseline + 1)
-    ctx.set_source_rgba(*color, 1.0)
-    ctx.show_text(icon)
-    ctx.set_font_size(13)
-    # Right-aligned, so the graph stays put as the number changes
-    ctx.move_to(GRAPH_X - 4 - ctx.text_extents(value).x_advance, baseline)
-    ctx.set_source_rgba(*C["fg"], 0.92)
-    ctx.show_text(value)
-    return surface, ctx
-
-
-def publish(name, surface, tooltip):
-    tmp = OUT / f".{name}.png"
-    path = OUT / f"{name}.png"
-    surface.write_to_png(str(tmp))
-    os.replace(tmp, path)
-    tmp = OUT / f".{name}.meta"
-    tmp.write_text(f"{path}\n{tooltip.replace(chr(10), '&#10;')}\n")
-    os.replace(tmp, OUT / f"{name}.meta")
-
-
-def hide(name):
-    """Waybar hides an image module whose file is missing."""
-    (OUT / f"{name}.png").unlink(missing_ok=True)
-    (OUT / f"{name}.meta").write_text(f"{OUT / (name + '.png')}\n\n")
+def graph(values, color_name="accent"):
+    """Values from 0 to 1 drawn as block characters, in a theme color."""
+    bars = "".join(BLOCKS[min(int(max(v, 0.0) * len(BLOCKS)), len(BLOCKS) - 1)] for v in values)
+    return f"<span foreground='{C[color_name]}'>{bars}</span>"
 
 
 def row(key, value):
@@ -180,31 +112,26 @@ class Cpu:
             self.prev[name] = (idle, total)
         return usage
 
-    def draw(self):
+    def write(self):
         usage = self.sample()
         total = usage.get("cpu", 0.0)
         cores = [v for k, v in usage.items() if k != "cpu"]
         temp = read_int(self.sensor / "temp1_input") // 1000 if self.sensor else 0
-        # Square root, so everyday low usage still moves the line
+        # Square root, so everyday low usage still shows up in the graph
         self.history.append(math.sqrt(total / 100))
-
-        color = status_color(total)
-        surface, ctx = tile("󰻠", f"{total:.0f}%", color)
-        line(ctx, self.history, color)
-
         freqs = [read_int(p) for p in Path("/sys/devices/system/cpu").glob("cpu[0-9]*/cpufreq/scaling_cur_freq")]
-        busiest = sorted(enumerate(cores), key=lambda item: -item[1])[:3]
-        publish("cpu", surface, "\n".join([
+        publish("cpu", f"CPU {total:2.0f}%", "\n".join([
             title(self.model),
             "",
-            row("Usage", f"{total:.0f}%  ({len(cores)} threads)"),
+            row("Usage", f"{total:.0f}%"),
+            row("History", graph(self.history)),
+            row("Threads", graph(math.sqrt(v / 100) for v in cores)),
             row("Temp", f"{temp}°C"),
             row("Peak clock", f"{max(freqs, default=0) / 1e6:.2f} GHz"),
             row("Load", " ".join(read("/proc/loadavg").split()[:3])),
-            row("Busiest", "  ".join(f"#{i} {v:.0f}%" for i, v in busiest)),
             "",
             HINT.format("Click for btop"),
-        ]))
+        ]), level_class(total))
 
 
 class Gpu:
@@ -236,31 +163,29 @@ class Gpu:
             self.stats = stats
             time.sleep(GPU_POLL_SECONDS)
 
-    def draw(self):
+    def write(self):
         stats = self.stats
         if not stats or not self.active():
             self.history.clear()
-            hide("gpu")
+            publish("gpu", "", "")  # empty text hides the icon while the card sleeps
             return
         self.history.append(math.sqrt(stats["util"] / 100))
-        color = status_color(stats["util"])
-        surface, ctx = tile("󰢮", f"{stats['util']:.0f}%", color)
-        line(ctx, self.history, color)
-        publish("gpu", surface, "\n".join([
+        publish("gpu", f"GPU {stats['util']:2.0f}%", "\n".join([
             title(stats["name"]),
             "",
             row("Usage", f"{stats['util']:.0f}%"),
+            row("History", graph(self.history)),
             row("VRAM", f"{stats['used'] / 1024:.1f} / {stats['total'] / 1024:.1f} GiB"),
             row("Temp", f"{stats['temp']:.0f}°C"),
             row("Power", f"{stats['power']} W"),
-        ]))
+        ]), level_class(stats["util"]))
 
 
 class Memory:
     def __init__(self):
         self.history = deque(maxlen=SAMPLES)
 
-    def draw(self):
+    def write(self):
         info = {}
         for text in read("/proc/meminfo").splitlines():
             key, value = text.split(":", 1)
@@ -269,24 +194,20 @@ class Memory:
         used = info["MemTotal"] - info["MemAvailable"]
         pct = 100 * used / info["MemTotal"]
         self.history.append(pct / 100)
-
-        color = status_color(pct)
-        surface, ctx = tile("󰍛", f"{used / gib:.1f}G", color)
-        line(ctx, self.history, color)
-
         disk = os.statvfs("/")
         disk_total = disk.f_blocks * disk.f_frsize
         disk_used = disk_total - disk.f_bfree * disk.f_frsize
-        publish("mem", surface, "\n".join([
+        publish("mem", f"MEM {pct:2.0f}%", "\n".join([
             title("Memory and storage"),
             "",
             row("RAM", f"{used / gib:.1f} / {info['MemTotal'] / gib:.1f} GiB  ({pct:.0f}%)"),
+            row("History", graph(self.history)),
             row("Cached", f"{info['Cached'] / gib:.1f} GiB"),
             row("Swap", f"{(info['SwapTotal'] - info['SwapFree']) / gib:.1f} / {info['SwapTotal'] / gib:.1f} GiB"),
             row("Disk /", f"{disk_used / gib:.0f} / {disk_total / gib:.0f} GiB"),
             "",
             HINT.format("Click for btop"),
-        ]))
+        ]), level_class(pct))
 
 
 class Network:
@@ -317,7 +238,7 @@ class Network:
         """Log scale: 1 KB/s is the bottom of the graph and 100 MB/s the top."""
         return min(math.log10(rate / 1024) / 5, 1.0) if rate > 1024 else 0.0
 
-    def draw(self):
+    def write(self):
         interface = self.interface()
         counters = self.counters(interface) if interface else None
         now = time.monotonic()
@@ -329,16 +250,14 @@ class Network:
         self.prev = (interface, counters, now) if counters else None
         self.down.append(self.level(down))
         self.up.append(self.level(up))
-
-        surface, ctx = tile("󰁅", human(down) if interface else "off", C["accent"] if interface else C["red"])
-        line(ctx, self.up, C["fg"], alpha=0.45, fill=False)
-        line(ctx, self.down, C["accent"])
         rx, tx = counters if counters else (0, 0)
-        publish("net", surface, "\n".join([
+        publish("net", f"󰁅 {human(down) if interface else 'off':>4}", "\n".join([
             title(interface or "No network"),
             "",
             row("Down", f"{human(down)}/s"),
+            row("History", graph(self.down)),
             row("Up", f"{human(up)}/s"),
+            row("History", graph(self.up, "magenta")),
             row("Session", f"↓ {human(rx)}  ↑ {human(tx)}"),
             "",
             HINT.format("Click for network settings"),
@@ -371,7 +290,7 @@ def main():
     while os.getppid() == parent:
         for stat in stats:
             try:
-                stat.draw()
+                stat.write()
             except Exception as error:  # one bad sensor must not stop the others
                 print(f"telemetryd: {type(stat).__name__}: {error}", file=sys.stderr, flush=True)
         next_tick += 1.0
