@@ -1,0 +1,141 @@
+@import url("../themes/current/waybar-colors.css");
+
+/* "Liquid": no bar at all, just tiles floating over the wallpaper. The stat tiles
+   fill with liquid and are drawn by liquidd.py. Colors come from the active theme. */
+
+* {
+    border: none;
+    border-radius: 0;
+    font-family: "Iosevka Nerd Font Propo", "Symbols Nerd Font", sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 0;
+}
+
+window#waybar {
+    color: @fg;
+    background: transparent;
+}
+
+tooltip {
+    background: @bg;
+    border: 1px solid alpha(@fg, 0.15);
+    border-radius: 12px;
+}
+
+tooltip label {
+    font-family: "Iosevka Nerd Font Mono", monospace;
+    font-weight: 500;
+    color: @fg;
+    padding: 6px 10px;
+}
+
+#workspaces button.urgent {
+    color: @bg;
+    background: @red;
+}
+
+#mode {
+    color: @red;
+    padding: 0 10px;
+}
+
+#backlight:hover,
+#pulseaudio:hover,
+#network:hover {
+    color: @accent;
+}
+
+#pulseaudio.muted:not(.mic),
+#pulseaudio.mic.source-muted,
+#network.disconnected {
+    color: @red;
+}
+
+#tray > .needs-attention {
+    -gtk-icon-effect: highlight;
+}
+
+/* Everything the script doesn't draw gets the same dark tile shape */
+#custom-debian,
+#clock,
+#mpris,
+#controls,
+#tray {
+    background: alpha(@bg, 0.92);
+    border-radius: 10px;
+    margin: 2px 3px;
+}
+
+#custom-debian {
+    color: @accent;
+    font-size: 17px;
+    padding: 0 12px;
+    margin-left: 0;
+}
+
+#workspaces {
+    margin: 2px 3px;
+    padding: 0 3px;
+    border-radius: 10px;
+    background: alpha(@bg, 0.92);
+}
+
+#workspaces button {
+    color: alpha(@fg, 0.45);
+    margin: 3px 1px;
+    padding: 0;
+    min-width: 28px;
+    border-radius: 7px;
+    transition: all 0.2s ease;
+}
+
+#workspaces button:hover {
+    color: @fg;
+    background: alpha(@fg, 0.10);
+    box-shadow: none;
+}
+
+#workspaces button.visible {
+    color: @fg;
+}
+
+#workspaces button.focused {
+    color: @bg;
+    background: @accent;
+    font-weight: 800;
+}
+
+#clock {
+    color: @fg;
+    font-size: 15px;
+    font-weight: 800;
+    padding: 0 16px;
+}
+
+#mpris {
+    color: alpha(@fg, 0.70);
+    font-weight: 500;
+    padding: 0 14px;
+}
+
+#image {
+    margin: 2px 3px;
+}
+
+#controls {
+    padding: 0 6px;
+}
+
+#backlight,
+#pulseaudio,
+#network {
+    color: alpha(@fg, 0.75);
+    font-size: 15px;
+    padding: 0 7px;
+    transition: color 0.2s ease;
+}
+
+#tray {
+    padding: 0 10px;
+}

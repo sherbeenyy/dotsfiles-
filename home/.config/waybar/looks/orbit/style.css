@@ -1,0 +1,131 @@
+@import url("../themes/current/waybar-colors.css");
+
+/* "Orbit": one floating capsule in the middle of an empty bar, with ring gauges
+   drawn by orbitd.py. Colors come from the active theme. */
+
+* {
+    border: none;
+    border-radius: 0;
+    font-family: "Iosevka Nerd Font Propo", "Symbols Nerd Font", sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 0;
+}
+
+window#waybar {
+    color: @fg;
+    background: transparent;
+}
+
+/* The capsule */
+.modules-center {
+    padding: 0 6px;
+    border-radius: 21px;
+    background: alpha(@bg, 0.92);
+    border: 1px solid alpha(@fg, 0.12);
+}
+
+tooltip {
+    background: @bg;
+    border: 1px solid alpha(@fg, 0.15);
+    border-radius: 12px;
+}
+
+tooltip label {
+    font-family: "Iosevka Nerd Font Mono", monospace;
+    font-weight: 500;
+    color: @fg;
+    padding: 6px 10px;
+}
+
+#custom-debian {
+    color: @accent;
+    font-size: 18px;
+    padding: 0 10px 0 12px;
+}
+
+/* Workspaces: round numbers, a filled circle on the current one */
+#workspaces button {
+    color: alpha(@fg, 0.45);
+    margin: 7px 1px;
+    padding: 0;
+    min-width: 26px;
+    border-radius: 13px;
+    transition: all 0.2s ease;
+}
+
+#workspaces button:hover {
+    color: @fg;
+    background: alpha(@fg, 0.10);
+    box-shadow: none;
+}
+
+#workspaces button.visible {
+    color: @fg;
+}
+
+#workspaces button.focused {
+    color: @bg;
+    background: @accent;
+    font-weight: 800;
+}
+
+#workspaces button.urgent {
+    color: @bg;
+    background: @red;
+}
+
+#mode {
+    color: @red;
+    padding: 0 10px;
+}
+
+#clock {
+    color: @fg;
+    font-size: 15px;
+    font-weight: 800;
+    padding: 0 16px 0 14px;
+}
+
+#mpris {
+    color: alpha(@fg, 0.65);
+    font-weight: 500;
+    padding: 0 14px 0 0;
+}
+
+/* Ring gauges */
+#image {
+    margin: 0 5px;
+}
+
+/* Controls: quiet until hovered */
+#backlight,
+#pulseaudio,
+#network {
+    color: alpha(@fg, 0.70);
+    font-size: 15px;
+    padding: 0 7px;
+    transition: color 0.2s ease;
+}
+
+#backlight { margin-left: 8px; }
+
+#backlight:hover,
+#pulseaudio:hover,
+#network:hover {
+    color: @accent;
+}
+
+#pulseaudio.muted:not(.mic),
+#pulseaudio.mic.source-muted,
+#network.disconnected {
+    color: @red;
+}
+
+#tray {
+    padding: 0 6px;
+}
+
+#tray > .needs-attention {
+    -gtk-icon-effect: highlight;
+}

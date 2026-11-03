@@ -1,0 +1,158 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 36,
+    "margin-top": 0,
+    "spacing": 0,
+    "custom/debian": {
+        "format": "",
+        "tooltip-format": "Open apps",
+        "on-click": "fuzzel"
+    },
+    "sway/workspaces": {
+        "disable-scroll": true,
+        "all-outputs": true,
+        "format": "{name}"
+    },
+    "sway/mode": {
+        "format": "󰩺  {}"
+    },
+    "clock": {
+        "format": "{:%I:%M %p}",
+        "format-alt": "{:%a %d %b}",
+        "tooltip-format": "<big>{:%B %Y}</big>\n<tt><small>{calendar}</small></tt>"
+    },
+    "mpris": {
+        "format": "{status_icon}  {dynamic}",
+        "dynamic-order": [
+            "title"
+        ],
+        "dynamic-len": 28,
+        "status-icons": {
+            "playing": "󰐊",
+            "paused": "󰏤",
+            "stopped": "󰓛"
+        },
+        "tooltip-format": "{player}\n{dynamic}"
+    },
+    "image#cpu": {
+        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-equalizer/cpu.meta\" 2>/dev/null",
+        "size": 110,
+        "interval": 1,
+        "on-click": "foot --app-id=floating-terminal --window-size-pixels=1100x700 btop"
+    },
+    "image#gpu": {
+        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-equalizer/gpu.meta\" 2>/dev/null",
+        "size": 92,
+        "interval": 1
+    },
+    "image#mem": {
+        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-equalizer/mem.meta\" 2>/dev/null",
+        "size": 92,
+        "interval": 1,
+        "on-click": "foot --app-id=floating-terminal --window-size-pixels=1100x700 btop"
+    },
+    "image#net": {
+        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-equalizer/net.meta\" 2>/dev/null",
+        "size": 92,
+        "interval": 1,
+        "on-click": "foot --app-id=floating-terminal --window-size-pixels=750x550 nmtui"
+    },
+    "image#battery": {
+        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-equalizer/battery.meta\" 2>/dev/null",
+        "size": 92,
+        "interval": 1
+    },
+    "backlight": {
+        "device": "nvidia_wmi_ec_backlight",
+        "format": "{icon}",
+        "format-icons": [
+            "󰃞",
+            "󰃟",
+            "󰃠"
+        ],
+        "on-scroll-up": "~/.config/sway/osd-brightness.sh up 2",
+        "on-scroll-down": "~/.config/sway/osd-brightness.sh down 2",
+        "tooltip-format": "Brightness {percent}%\nScroll to change",
+        "smooth-scrolling-threshold": 1
+    },
+    "pulseaudio": {
+        "format": "{icon}",
+        "format-muted": "󰝟",
+        "format-icons": {
+            "headphone": "󰋋",
+            "headset": "󰋎",
+            "default": [
+                "󰕿",
+                "󰖀",
+                "󰕾"
+            ]
+        },
+        "on-click": "~/.config/sway/toggle-mute.sh speaker",
+        "on-scroll-up": "~/.config/sway/osd-volume.sh up 2",
+        "on-scroll-down": "~/.config/sway/osd-volume.sh down 2",
+        "tooltip-format": "{desc}  {volume}%\nScroll to change, click to mute",
+        "smooth-scrolling-threshold": 1
+    },
+    "pulseaudio#mic": {
+        "format": "{format_source}",
+        "format-muted": "{format_source}",
+        "format-bluetooth": "{format_source}",
+        "format-source": "󰍬",
+        "format-source-muted": "󰍭",
+        "tooltip-format": "Mic {source_volume}%\nClick to mute, scroll to change",
+        "on-click": "~/.config/sway/toggle-mute.sh mic",
+        "on-scroll-up": "wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SOURCE@ 2%+",
+        "on-scroll-down": "wpctl set-volume @DEFAULT_AUDIO_SOURCE@ 2%-",
+        "smooth-scrolling-threshold": 1
+    },
+    "network": {
+        "format-wifi": "{icon}",
+        "format-ethernet": "󰈀",
+        "format-linked": "󰈀",
+        "format-disconnected": "󰤭",
+        "format-icons": [
+            "󰤟",
+            "󰤢",
+            "󰤥",
+            "󰤨"
+        ],
+        "tooltip-format": "{ifname}: {ipaddr}/{cidr}",
+        "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ipaddr}/{cidr}",
+        "on-click": "foot --app-id=floating-terminal --window-size-pixels=750x550 nmtui"
+    },
+    "tray": {
+        "icon-size": 15,
+        "spacing": 8
+    },
+    "margin-left": 12,
+    "margin-right": 12,
+    "modules-left": [
+        "custom/debian",
+        "sway/workspaces",
+        "sway/mode"
+    ],
+    "modules-center": [
+        "clock",
+        "mpris"
+    ],
+    "modules-right": [
+        "image#cpu",
+        "image#gpu",
+        "image#mem",
+        "image#net",
+        "backlight",
+        "pulseaudio",
+        "pulseaudio#mic",
+        "network",
+        "tray",
+        "image#battery",
+        "custom/equalizerd"
+    ],
+    "custom/equalizerd": {
+        "exec": "python3 ~/.config/waybar/looks/equalizer/equalizerd.py",
+        "return-type": "json",
+        "restart-interval": 5,
+        "tooltip": false
+    }
+}

@@ -6,3 +6,4 @@ home/.config/starship.toml
 home/.config/sway/*.state
 home/.config/sway/display-workspaces.conf
 home/.zshrc.local
+__pycache__/

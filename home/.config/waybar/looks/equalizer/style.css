@@ -1,0 +1,133 @@
+@import url("../themes/current/waybar-colors.css");
+
+/* "Equalizer": three tabs hanging from the top edge of the screen, with level bars
+   drawn by equalizerd.py. Colors come from the active theme. */
+
+* {
+    border: none;
+    border-radius: 0;
+    font-family: "Iosevka Nerd Font Propo", "Symbols Nerd Font", sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 0;
+}
+
+window#waybar {
+    color: @fg;
+    background: transparent;
+}
+
+tooltip {
+    background: @bg;
+    border: 1px solid alpha(@fg, 0.15);
+    border-radius: 12px;
+}
+
+tooltip label {
+    font-family: "Iosevka Nerd Font Mono", monospace;
+    font-weight: 500;
+    color: @fg;
+    padding: 6px 10px;
+}
+
+#workspaces button.urgent {
+    color: @bg;
+    background: @red;
+}
+
+#mode {
+    color: @red;
+    padding: 0 10px;
+}
+
+#backlight:hover,
+#pulseaudio:hover,
+#network:hover {
+    color: @accent;
+}
+
+#pulseaudio.muted:not(.mic),
+#pulseaudio.mic.source-muted,
+#network.disconnected {
+    color: @red;
+}
+
+#tray > .needs-attention {
+    -gtk-icon-effect: highlight;
+}
+
+/* The tabs: square at the screen edge, rounded below, with an accent line along the bottom */
+.modules-left,
+.modules-center,
+.modules-right {
+    background: alpha(@bg, 0.92);
+    border-radius: 0 0 14px 14px;
+    border-bottom: 2px solid alpha(@accent, 0.70);
+    padding: 0 8px;
+}
+
+#custom-debian {
+    color: @accent;
+    font-size: 17px;
+    padding: 0 10px 0 6px;
+}
+
+/* Workspaces: the current one is a block hanging from the top, like the tabs */
+#workspaces button {
+    color: alpha(@fg, 0.45);
+    padding: 0;
+    margin: 0 1px 5px;
+    min-width: 28px;
+    border-radius: 0 0 8px 8px;
+    transition: all 0.2s ease;
+}
+
+#workspaces button:hover {
+    color: @fg;
+    background: alpha(@fg, 0.10);
+    box-shadow: none;
+}
+
+#workspaces button.visible {
+    color: @fg;
+}
+
+#workspaces button.focused {
+    color: @bg;
+    background: @accent;
+    font-weight: 800;
+    box-shadow: 0 0 10px alpha(@accent, 0.50);
+}
+
+#clock {
+    color: @fg;
+    font-size: 15px;
+    font-weight: 800;
+    padding: 0 12px;
+}
+
+#mpris {
+    color: alpha(@fg, 0.65);
+    font-weight: 500;
+    padding: 0 8px 0 0;
+}
+
+#image {
+    margin: 0 7px;
+}
+
+#backlight,
+#pulseaudio,
+#network {
+    color: alpha(@fg, 0.70);
+    font-size: 15px;
+    padding: 0 6px;
+    transition: color 0.2s ease;
+}
+
+#backlight { margin-left: 6px; }
+#network { margin-right: 6px; }
+
+#tray {
+    padding: 0 6px;
+}

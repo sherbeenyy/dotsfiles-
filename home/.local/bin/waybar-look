@@ -1,0 +1,46 @@
+#!/bin/bash
+# Switch the look of waybar.
+#   waybar-look              show the current look and the ones available
+#   waybar-look <name>       switch to that look
+#
+# "classic" is ~/.config/waybar/config and style.css in the dotfiles repo.
+# Every other look is a folder in ~/.config/waybar/looks/.
+
+REPO=$(dirname "$(readlink -f "$0")")/../../.config/waybar
+REPO=$(realpath "$REPO")
+LIVE="$HOME/.config/waybar"
+
+current() {
+    local target; target=$(readlink -f "$LIVE/config")
+    case "$target" in
+        "$REPO/config") echo classic ;;
+        "$REPO"/looks/*) basename "$(dirname "$target")" ;;
+        *) echo "unknown ($target)" ;;
+    esac
+}
+
+if [ -z "$1" ]; then
+    echo "current: $(current)"
+    echo "available: classic $(ls "$REPO/looks" | tr '\n' ' ')"
+    exit 0
+fi
+
+if [ "$1" = classic ]; then
+    SRC="$REPO"
+else
+    SRC="$REPO/looks/$1"
+fi
+
+if [ ! -f "$SRC/config" ] || [ ! -f "$SRC/style.css" ]; then
+    echo "No look called '$1'. Available: classic $(ls "$REPO/looks" | tr '\n' ' ')" >&2
+    exit 1
+fi
+
+ln -sf "$SRC/config" "$LIVE/config"
+ln -sf "$SRC/style.css" "$LIVE/style.css"
+
+# Same restart as switch-theme.sh: sway brings waybar back on reload
+[ -z "$SWAYSOCK" ] && exit 0
+pkill -x waybar
+swaymsg reload >/dev/null
+echo "waybar look: $1"

@@ -1,0 +1,217 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 34,
+    "margin-top": 6,
+    "margin-left": 10,
+    "margin-right": 10,
+    "spacing": 0,
+    "modules-left": [
+        "custom/debian",
+        "sway/workspaces",
+        "sway/mode"
+    ],
+    "modules-center": [
+        "mpris",
+        "clock"
+    ],
+    "modules-right": [
+        "image#cpu",
+        "image#gpu",
+        "image#mem",
+        "image#net",
+        "group/brightness",
+        "group/audio",
+        "pulseaudio#mic",
+        "network",
+        "battery",
+        "tray",
+        "custom/power",
+        "custom/telemetryd"
+    ],
+    "custom/telemetryd": {
+        "exec": "python3 ~/.config/waybar/looks/telemetry/telemetryd.py",
+        "return-type": "json",
+        "restart-interval": 5,
+        "tooltip": false
+    },
+    "custom/debian": {
+        "format": "",
+        "tooltip-format": "Open apps",
+        "on-click": "fuzzel"
+    },
+    "sway/workspaces": {
+        "disable-scroll": true,
+        "all-outputs": true,
+        "format": "{name}"
+    },
+    "sway/mode": {
+        "format": "󰩺  {}"
+    },
+    "mpris": {
+        "format": "{status_icon}  {dynamic}",
+        "dynamic-order": [
+            "title",
+            "artist"
+        ],
+        "dynamic-len": 38,
+        "status-icons": {
+            "playing": "󰐊",
+            "paused": "󰏤",
+            "stopped": "󰓛"
+        },
+        "tooltip-format": "{player}\n{dynamic}"
+    },
+    "clock": {
+        "format": "{:%I:%M %p}",
+        "format-alt": "{:%A, %d %B %Y}",
+        "tooltip-format": "<big>{:%B %Y}</big>\n<tt><small>{calendar}</small></tt>"
+    },
+    "image#cpu": {
+        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-telemetry/cpu.meta\" 2>/dev/null",
+        "size": 92,
+        "interval": 1,
+        "on-click": "foot --app-id=floating-terminal --window-size-pixels=1100x700 btop"
+    },
+    "image#gpu": {
+        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-telemetry/gpu.meta\" 2>/dev/null",
+        "size": 92,
+        "interval": 1
+    },
+    "image#mem": {
+        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-telemetry/mem.meta\" 2>/dev/null",
+        "size": 92,
+        "interval": 1,
+        "on-click": "foot --app-id=floating-terminal --window-size-pixels=1100x700 btop"
+    },
+    "image#net": {
+        "exec": "cat \"$XDG_RUNTIME_DIR/waybar-telemetry/net.meta\" 2>/dev/null",
+        "size": 92,
+        "interval": 1,
+        "on-click": "foot --app-id=floating-terminal --window-size-pixels=750x550 nmtui"
+    },
+    "group/brightness": {
+        "orientation": "inherit",
+        "drawer": {
+            "transition-duration": 250,
+            "transition-left-to-right": false,
+            "children-class": "revealed"
+        },
+        "modules": [
+            "backlight",
+            "backlight/slider"
+        ]
+    },
+    "backlight": {
+        "device": "nvidia_wmi_ec_backlight",
+        "format": "{icon}",
+        "format-icons": [
+            "󰃞",
+            "󰃟",
+            "󰃠"
+        ],
+        "on-scroll-up": "~/.config/sway/osd-brightness.sh up 2",
+        "on-scroll-down": "~/.config/sway/osd-brightness.sh down 2",
+        "tooltip-format": "Brightness {percent}%\nHover for the slider, or scroll",
+        "smooth-scrolling-threshold": 1
+    },
+    "backlight/slider": {
+        "device": "nvidia_wmi_ec_backlight",
+        "min": 5,
+        "max": 100,
+        "orientation": "horizontal"
+    },
+    "group/audio": {
+        "orientation": "inherit",
+        "drawer": {
+            "transition-duration": 250,
+            "transition-left-to-right": false,
+            "children-class": "revealed"
+        },
+        "modules": [
+            "pulseaudio",
+            "pulseaudio/slider"
+        ]
+    },
+    "pulseaudio": {
+        "format": "{icon}",
+        "format-muted": "󰝟",
+        "format-icons": {
+            "headphone": "󰋋",
+            "headset": "󰋎",
+            "default": [
+                "󰕿",
+                "󰖀",
+                "󰕾"
+            ]
+        },
+        "on-click": "~/.config/sway/toggle-mute.sh speaker",
+        "on-scroll-up": "~/.config/sway/osd-volume.sh up 2",
+        "on-scroll-down": "~/.config/sway/osd-volume.sh down 2",
+        "tooltip-format": "{desc}  {volume}%\nHover for the slider, click to mute, or scroll",
+        "smooth-scrolling-threshold": 1
+    },
+    "pulseaudio/slider": {
+        "min": 0,
+        "max": 100,
+        "orientation": "horizontal"
+    },
+    "pulseaudio#mic": {
+        "format": "{format_source}",
+        "format-muted": "{format_source}",
+        "format-bluetooth": "{format_source}",
+        "format-source": "󰍬",
+        "format-source-muted": "󰍭",
+        "tooltip-format": "Mic {source_volume}%\nClick to mute, scroll to change",
+        "on-click": "~/.config/sway/toggle-mute.sh mic",
+        "on-scroll-up": "wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SOURCE@ 2%+",
+        "on-scroll-down": "wpctl set-volume @DEFAULT_AUDIO_SOURCE@ 2%-",
+        "smooth-scrolling-threshold": 1
+    },
+    "network": {
+        "format-wifi": "{icon}",
+        "format-ethernet": "󰈀",
+        "format-linked": "󰈀",
+        "format-disconnected": "󰤭",
+        "format-icons": [
+            "󰤟",
+            "󰤢",
+            "󰤥",
+            "󰤨"
+        ],
+        "tooltip-format": "{ifname}: {ipaddr}/{cidr}",
+        "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ipaddr}/{cidr}",
+        "on-click": "foot --app-id=floating-terminal --window-size-pixels=750x550 nmtui"
+    },
+    "tray": {
+        "icon-size": 15,
+        "spacing": 10
+    },
+    "custom/power": {
+        "format": "󰐥",
+        "tooltip-format": "Power menu",
+        "on-click": "~/.config/sway/power-menu.sh"
+    },
+    "battery": {
+        "states": {
+            "warning": 30,
+            "critical": 15
+        },
+        "format": "{icon} {capacity}%",
+        "format-charging": "󰂄 {capacity}%",
+        "format-plugged": "󰚥 {capacity}%",
+        "tooltip-format": "{timeTo}\n{power:.1f} W",
+        "format-icons": [
+            "󰁺",
+            "󰁻",
+            "󰁼",
+            "󰁽",
+            "󰁾",
+            "󰁿",
+            "󰂀",
+            "󰂁",
+            "󰂂",
+            "󰁹"
+        ]
+    }
+}
