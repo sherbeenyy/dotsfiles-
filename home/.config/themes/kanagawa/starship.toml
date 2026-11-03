@@ -1,5 +1,5 @@
 format = """
-[╭─](accent) $directory$git_branch$git_status$time
+[╭─](accent) [ ](red)$directory$git_branch$git_status$time
 [╰─](accent) ${env_var.PET_OK}${env_var.PET_ERR}${env_var.PET_ZZ}${env_var.PET_HUNGRY}$character"""
 
 palette = "kanagawa"
