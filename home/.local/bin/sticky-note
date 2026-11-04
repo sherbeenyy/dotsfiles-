@@ -1,8 +1,9 @@
 #!/usr/bin/python3
 """A task sticky note pinned to the Sway desktop, behind all windows.
 
-    sticky-note          start the note (does nothing if already running)
-    sticky-note toggle   bring the note in front of windows / send it back
+    sticky-note              start the note (does nothing if already running)
+    sticky-note toggle       bring the note in front of windows / send it back
+    sticky-note visibility   remove the note from the desktop / put it back
 
 Tasks are stored as a Markdown checklist that can also be edited by hand:
     $XDG_DATA_HOME/sticky-note/notes.md  (override with $STICKY_NOTE_FILE)
@@ -20,6 +21,8 @@ from pathlib import Path
 DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
 NOTES = Path(os.environ.get("STICKY_NOTE_FILE") or DATA_HOME / "sticky-note/notes.md")
 LOCK = Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()) / "sticky-note.lock"
+HIDDEN = NOTES.parent / "hidden"  # exists while the note is off the desktop
+COMMAND_SIGNALS = {"toggle": signal.SIGUSR1, "visibility": signal.SIGUSR2}
 
 WIDTH, HEIGHT, MARGIN = 320, 420, 12
 SAVE_DELAY_MS = 300
@@ -108,12 +111,20 @@ def acquire_lock():
     return fd
 
 
-def signal_running_instance():
+def set_hidden_flag(hidden):
+    if hidden:
+        HIDDEN.parent.mkdir(parents=True, exist_ok=True)
+        HIDDEN.touch()
+    else:
+        HIDDEN.unlink(missing_ok=True)
+
+
+def signal_running_instance(signum):
     # The lock holder is alive, so its pid is safe to signal. An empty file
     # means it is still starting up and hasn't installed its handler yet.
     pid = LOCK.read_text().strip()
     if pid:
-        os.kill(int(pid), signal.SIGUSR1)
+        os.kill(int(pid), signum)
 
 
 def run(lock_fd, start_in_front):
@@ -204,6 +215,7 @@ def run(lock_fd, start_in_front):
             self.window = None
             self.rows = []
             self.front = False
+            self.hidden = HIDDEN.exists()
             self.dirty = False
             self.save_source = None
             self.disk_text = read_notes()
@@ -256,7 +268,9 @@ def run(lock_fd, start_in_front):
             self.window = window
             self.rows = []
             self.show_tasks(self.tasks)
-            window.show_all()
+            outer.show_all()
+            if not self.hidden:
+                window.show()
 
         def on_window_closed(self, *_):
             # Sway closes layer surfaces when their monitor is unplugged. Keep
@@ -300,11 +314,16 @@ def run(lock_fd, start_in_front):
             self.front = front
             window = self.window
             if front:
+                # Behind an opaque window Sway stops sending frame callbacks, so
+                # GTK would never commit a layer change and the note would stay
+                # stuck at the back. A fresh surface doesn't wait for a callback.
+                window.hide()
                 monitor = self.focused_monitor()
                 if monitor:
                     GtkLayerShell.set_monitor(window, monitor)
                 GtkLayerShell.set_layer(window, GtkLayerShell.Layer.OVERLAY)
                 GtkLayerShell.set_keyboard_mode(window, GtkLayerShell.KeyboardMode.EXCLUSIVE)
+                window.show()
                 self.entry.grab_focus()
             else:
                 self.save_now()
@@ -313,6 +332,16 @@ def run(lock_fd, start_in_front):
                 # window underneath instead of leaving it on the note.
                 GtkLayerShell.set_keyboard_mode(window, GtkLayerShell.KeyboardMode.NONE)
                 GLib.timeout_add(100, self.allow_click_focus)
+                if self.hidden:
+                    window.hide()
+
+        def set_hidden(self, hidden):
+            self.hidden = hidden
+            set_hidden_flag(hidden)
+            if hidden:
+                self.set_front(False)
+            else:
+                self.window.show()
 
         def allow_click_focus(self):
             if not self.front:
@@ -322,6 +351,10 @@ def run(lock_fd, start_in_front):
 
         def on_toggle_signal(self):
             self.set_front(not self.front)
+            return GLib.SOURCE_CONTINUE
+
+        def on_visibility_signal(self):
+            self.set_hidden(not self.hidden)
             return GLib.SOURCE_CONTINUE
 
         # --- Task list ------------------------------------------------------
@@ -414,6 +447,7 @@ def run(lock_fd, start_in_front):
 
     app = App()
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, app.on_toggle_signal)
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR2, app.on_visibility_signal)
     for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signum, app.quit)
     os.write(lock_fd, str(os.getpid()).encode())  # handlers ready: toggles may signal us
@@ -425,13 +459,15 @@ def run(lock_fd, start_in_front):
 
 def main():
     command = sys.argv[1] if len(sys.argv) > 1 else "run"
-    if command not in ("run", "toggle"):
+    if command != "run" and command not in COMMAND_SIGNALS:
         sys.exit(__doc__)
     lock_fd = acquire_lock()
     if lock_fd is None:
-        if command == "toggle":
-            signal_running_instance()
+        if command != "run":
+            signal_running_instance(COMMAND_SIGNALS[command])
         return
+    if command == "visibility":  # not running yet: apply the change, then start
+        set_hidden_flag(not HIDDEN.exists())
     run(lock_fd, start_in_front=command == "toggle")
 
 
