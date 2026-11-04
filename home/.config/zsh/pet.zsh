@@ -12,6 +12,8 @@ _pet_hungry() { local fed=($_PET_DIR/fed(Nmh-8)); (( ! $#fed )); }
 
 _pet_precmd() {
     local s=$? h
+    # The first prompt's $? is left over from the startup files, not a command
+    (( ${+_PET_STARTED} )) || { s=0; _PET_STARTED=1; }
     unset PET_OK PET_ERR PET_ZZ PET_HUNGRY
     strftime -s h %H $EPOCHSECONDS
     if (( s != 0 && s != 130 )); then  # 130 = Ctrl+C, not a real failure
