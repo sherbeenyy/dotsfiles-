@@ -7,6 +7,7 @@
 
 Tasks are stored as a Markdown checklist that can also be edited by hand:
     $XDG_DATA_HOME/sticky-note/notes.md  (override with $STICKY_NOTE_FILE)
+Start a task with !, !! or !!! to set its priority; higher priorities sort first.
 """
 import fcntl
 import json
@@ -29,6 +30,8 @@ SAVE_DELAY_MS = 300
 RECREATE_DELAY_MS = 1000  # after the note's monitor goes away
 TASK_LINE = re.compile(r"^\s*[-*]\s*\[( |x|X)\]\s*(.*)$")
 BULLET = re.compile(r"^\s*[-*]\s+")
+PRIORITY_MARK = re.compile(r"^(!{1,3})\s+(.*)$")
+MAX_PRIORITY = 3
 
 CSS = b"""
 * { font-family: "Iosevka Nerd Font"; font-size: 12pt; }
@@ -48,6 +51,10 @@ button {
     text-shadow: none; -gtk-icon-shadow: none; padding: 0 6px; min-height: 0; min-width: 0;
 }
 button:hover { background: rgba(59, 48, 0, 0.12); color: #3b3000; }
+button.priority { padding: 0 2px; font-weight: bold; color: #b5a44f; }
+button.p1, button.p1:hover { color: #3f7d3a; }
+button.p2, button.p2:hover { color: #c26a00; }
+button.p3, button.p3:hover { color: #c62828; }
 check {
     background: #fff8d0; color: #3b3000; border: 1px solid #8a7416;
     box-shadow: none; -gtk-icon-shadow: none; min-width: 14px; min-height: 14px;
@@ -57,8 +64,19 @@ scrollbar slider { background: #c9b44f; min-width: 4px; border: none; }
 """
 
 
+def split_priority(text):
+    """Split leading !, !! or !!! off a task's text: returns (priority, text)."""
+    match = PRIORITY_MARK.match(text)
+    if match:
+        return len(match.group(1)), match.group(2).strip()
+    return 0, text
+
+
 def parse_tasks(text):
-    """Turn file text into (done, text) pairs; any other line becomes a task."""
+    """Turn file text into (done, priority, text) tuples, highest priority first.
+
+    Any line that isn't a checklist item becomes a task too.
+    """
     tasks = []
     for line in text.splitlines():
         match = TASK_LINE.match(line)
@@ -66,14 +84,20 @@ def parse_tasks(text):
             done, body = match.group(1) in "xX", match.group(2).strip()
         else:
             done, body = False, BULLET.sub("", line).strip()
+        priority, body = split_priority(body)
         if body:
-            tasks.append((done, body))
+            tasks.append((done, priority, body))
+    tasks.sort(key=lambda task: -task[1])  # stable: equal priorities keep their order
     return tasks
 
 
 def format_tasks(tasks):
-    return "".join(f"- [{'x' if done else ' '}] {' '.join(body.split())}\n"
-                   for done, body in tasks if body.strip())
+    lines = []
+    for done, priority, body in tasks:
+        if body.strip():
+            mark = "!" * priority + " " if priority else ""
+            lines.append(f"- [{'x' if done else ' '}] {mark}{' '.join(body.split())}\n")
+    return "".join(lines)
 
 
 def read_notes():
@@ -137,12 +161,18 @@ def run(lock_fd, start_in_front):
     from gi.repository import Gdk, Gio, GLib, Gtk, GtkLayerShell, Pango
 
     class Row:
-        """One task: a checkbox, wrapping text and a delete button."""
+        """One task: a checkbox, priority marker, wrapping text and a delete button."""
 
-        def __init__(self, app, done, body):
+        def __init__(self, app, done, priority, body):
             self.app = app
+            self.priority = priority
             self.box = Gtk.Box(spacing=6)
             self.check = Gtk.CheckButton(active=done, can_focus=False, valign=Gtk.Align.START)
+            self.badge = Gtk.Button(label="", can_focus=False, valign=Gtk.Align.START,
+                                    tooltip_text="Click to change priority")
+            self.badge.get_style_context().add_class("priority")
+            self.badge.get_child().set_width_chars(MAX_PRIORITY)
+            self.refresh_badge()
             self.text = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, hexpand=True,
                                      accepts_tab=False)
             self.buffer = self.text.get_buffer()
@@ -151,8 +181,10 @@ def run(lock_fd, start_in_front):
             delete = Gtk.Button(label="×", can_focus=False, valign=Gtk.Align.START,
                                 tooltip_text="Delete task")
             self.box.pack_start(self.check, False, False, 0)
+            self.box.pack_start(self.badge, False, False, 0)
             self.box.pack_start(self.text, True, True, 0)
             self.box.pack_start(delete, False, False, 0)
+            self.badge.connect("clicked", self.on_badge_clicked)
             self.check.connect("toggled", lambda *_: self.on_changed())
             self.buffer.connect("changed", lambda *_: self.on_changed())
             self.text.connect("key-press-event", self.on_key)
@@ -193,6 +225,21 @@ def run(lock_fd, start_in_front):
                 context.add_class("done")
             else:
                 context.remove_class("done")
+
+        def refresh_badge(self):
+            # Not set_label(): that replaces the child label and loses its width.
+            self.badge.get_child().set_text("!" * self.priority or "·")
+            context = self.badge.get_style_context()
+            for level in range(1, MAX_PRIORITY + 1):
+                context.remove_class(f"p{level}")
+            if self.priority:
+                context.add_class(f"p{self.priority}")
+
+        def on_badge_clicked(self, _button):
+            self.priority = (self.priority + 1) % (MAX_PRIORITY + 1)
+            self.refresh_badge()
+            self.app.sort_rows()
+            self.app.mark_dirty()
 
         def on_changed(self):
             self.refresh_style()
@@ -362,19 +409,25 @@ def run(lock_fd, start_in_front):
             for row in self.rows:
                 row.box.destroy()
             self.rows = []
-            for done, body in tasks:
-                self.append_row(done, body)
+            for done, priority, body in tasks:
+                self.append_row(done, priority, body)
             self.update_count()
 
-        def append_row(self, done, body):
-            row = Row(self, done, body)
+        def append_row(self, done, priority, body):
+            row = Row(self, done, priority, body)
             self.rows.append(row)
             self.list_box.pack_start(row.box, False, False, 0)
 
+        def sort_rows(self):
+            self.rows.sort(key=lambda row: -row.priority)  # stable
+            for position, row in enumerate(self.rows):
+                self.list_box.reorder_child(row.box, position)
+
         def add_from_entry(self, entry):
-            body = entry.get_text().strip()
+            priority, body = split_priority(entry.get_text().strip())
             if body:
-                self.append_row(False, body)
+                self.append_row(False, priority, body)
+                self.sort_rows()
                 entry.set_text("")
                 self.mark_dirty()
 
@@ -390,7 +443,7 @@ def run(lock_fd, start_in_front):
                 self.remove_row(row)
 
         def current_tasks(self):
-            return [(row.done, row.body) for row in self.rows]
+            return [(row.done, row.priority, row.body) for row in self.rows]
 
         def update_count(self):
             left = sum(not row.done for row in self.rows)
