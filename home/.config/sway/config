@@ -258,3 +258,7 @@ for_window [app_id="at.yrlf.wl_mirror"] inhibit_idle visible
 ### Battery Monitor
 exec_always killall battery-monitor.sh
 exec_always ~/.config/sway/battery-monitor.sh
+
+### Sticky Note (pinned behind all windows; the hotkey brings it to the front and back)
+exec ~/.local/bin/sticky-note
+bindsym $mod+n exec ~/.local/bin/sticky-note toggle

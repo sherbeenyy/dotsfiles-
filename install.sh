@@ -33,6 +33,8 @@ APT_PACKAGES=(
     dconf-gsettings-backend libglib2.0-bin
     # clipboard.sh image previews
     python3-gi gir1.2-gdkpixbuf-2.0
+    # sticky-note
+    gir1.2-gtk-3.0 gir1.2-gtklayershell-0.1
     # audio / network / bluetooth
     pipewire pipewire-pulse pipewire-audio pipewire-bin wireplumber
     network-manager network-manager-gnome wpasupplicant bluez

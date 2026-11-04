@@ -1,0 +1,439 @@
+#!/usr/bin/python3
+"""A task sticky note pinned to the Sway desktop, behind all windows.
+
+    sticky-note          start the note (does nothing if already running)
+    sticky-note toggle   bring the note in front of windows / send it back
+
+Tasks are stored as a Markdown checklist that can also be edited by hand:
+    $XDG_DATA_HOME/sticky-note/notes.md  (override with $STICKY_NOTE_FILE)
+"""
+import fcntl
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
+NOTES = Path(os.environ.get("STICKY_NOTE_FILE") or DATA_HOME / "sticky-note/notes.md")
+LOCK = Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()) / "sticky-note.lock"
+
+WIDTH, HEIGHT, MARGIN = 320, 420, 12
+SAVE_DELAY_MS = 300
+RECREATE_DELAY_MS = 1000  # after the note's monitor goes away
+TASK_LINE = re.compile(r"^\s*[-*]\s*\[( |x|X)\]\s*(.*)$")
+BULLET = re.compile(r"^\s*[-*]\s+")
+
+CSS = b"""
+* { font-family: "Iosevka Nerd Font"; font-size: 12pt; }
+window, .note { background-color: #fff1a8; color: #3b3000; }
+.title { font-weight: bold; font-size: 15pt; }
+.count { color: #7a6a1f; font-size: 10pt; }
+entry {
+    background: #fff8d0; color: #3b3000; caret-color: #3b3000;
+    border: 1px solid #d9c55f; border-radius: 3px; box-shadow: none;
+}
+entry:focus { border-color: #8a7416; }
+textview, textview text { background: transparent; color: #3b3000; caret-color: #3b3000; }
+selection, textview text selection, entry selection { background: #8a7416; color: #fff8d0; }
+.done textview text { color: #9c8c45; }
+button {
+    background: transparent; color: #7a6a1f; border: none; box-shadow: none;
+    text-shadow: none; -gtk-icon-shadow: none; padding: 0 6px; min-height: 0; min-width: 0;
+}
+button:hover { background: rgba(59, 48, 0, 0.12); color: #3b3000; }
+check {
+    background: #fff8d0; color: #3b3000; border: 1px solid #8a7416;
+    box-shadow: none; -gtk-icon-shadow: none; min-width: 14px; min-height: 14px;
+}
+scrollbar, scrollbar trough { background: transparent; border: none; }
+scrollbar slider { background: #c9b44f; min-width: 4px; border: none; }
+"""
+
+
+def parse_tasks(text):
+    """Turn file text into (done, text) pairs; any other line becomes a task."""
+    tasks = []
+    for line in text.splitlines():
+        match = TASK_LINE.match(line)
+        if match:
+            done, body = match.group(1) in "xX", match.group(2).strip()
+        else:
+            done, body = False, BULLET.sub("", line).strip()
+        if body:
+            tasks.append((done, body))
+    return tasks
+
+
+def format_tasks(tasks):
+    return "".join(f"- [{'x' if done else ' '}] {' '.join(body.split())}\n"
+                   for done, body in tasks if body.strip())
+
+
+def read_notes():
+    try:
+        return NOTES.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ""
+
+
+def write_notes(text):
+    """Write atomically so a crash can't leave a half-written task list."""
+    target = NOTES.resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=target.parent, prefix=".notes-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, target)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+
+
+def acquire_lock():
+    """Return an open fd holding the single-instance lock, or None if taken."""
+    fd = os.open(LOCK, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(fd)
+        return None
+    os.ftruncate(fd, 0)
+    return fd
+
+
+def signal_running_instance():
+    # The lock holder is alive, so its pid is safe to signal. An empty file
+    # means it is still starting up and hasn't installed its handler yet.
+    pid = LOCK.read_text().strip()
+    if pid:
+        os.kill(int(pid), signal.SIGUSR1)
+
+
+def run(lock_fd, start_in_front):
+    os.environ["GDK_BACKEND"] = "wayland"
+    import gi
+    gi.require_version("Gdk", "3.0")
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("GtkLayerShell", "0.1")
+    gi.require_version("Pango", "1.0")
+    from gi.repository import Gdk, Gio, GLib, Gtk, GtkLayerShell, Pango
+
+    class Row:
+        """One task: a checkbox, wrapping text and a delete button."""
+
+        def __init__(self, app, done, body):
+            self.app = app
+            self.box = Gtk.Box(spacing=6)
+            self.check = Gtk.CheckButton(active=done, can_focus=False, valign=Gtk.Align.START)
+            self.text = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, hexpand=True,
+                                     accepts_tab=False)
+            self.buffer = self.text.get_buffer()
+            self.strike = self.buffer.create_tag("strike", strikethrough=True)
+            self.buffer.set_text(body)
+            delete = Gtk.Button(label="×", can_focus=False, valign=Gtk.Align.START,
+                                tooltip_text="Delete task")
+            self.box.pack_start(self.check, False, False, 0)
+            self.box.pack_start(self.text, True, True, 0)
+            self.box.pack_start(delete, False, False, 0)
+            self.check.connect("toggled", lambda *_: self.on_changed())
+            self.buffer.connect("changed", lambda *_: self.on_changed())
+            self.text.connect("key-press-event", self.on_key)
+            self.text.connect("focus-out-event", self.on_focus_out)
+            self.text.connect("size-allocate", lambda *_: GLib.idle_add(self.fit_height))
+            delete.connect("clicked", lambda *_: app.remove_row(self))
+            self.refresh_style()
+            self.box.show_all()
+
+        def fit_height(self):
+            # GtkTextView doesn't grow to fit its wrapped lines inside a box,
+            # so measure the wrapped text and request that height explicitly.
+            width = self.text.get_allocated_width()
+            if self in self.app.rows and width > 1:
+                layout = self.text.create_pango_layout(self.body or " ")
+                layout.set_wrap(Pango.WrapMode.WORD_CHAR)
+                layout.set_width(width * Pango.SCALE)
+                height = layout.get_pixel_size()[1]
+                if self.text.get_size_request()[1] != height:
+                    self.text.set_size_request(-1, height)
+            return GLib.SOURCE_REMOVE
+
+        @property
+        def done(self):
+            return self.check.get_active()
+
+        @property
+        def body(self):
+            start, end = self.buffer.get_bounds()
+            return self.buffer.get_text(start, end, False)
+
+        def refresh_style(self):
+            start, end = self.buffer.get_bounds()
+            self.buffer.remove_tag(self.strike, start, end)
+            context = self.box.get_style_context()
+            if self.done:
+                self.buffer.apply_tag(self.strike, start, end)
+                context.add_class("done")
+            else:
+                context.remove_class("done")
+
+        def on_changed(self):
+            self.refresh_style()
+            self.fit_height()
+            self.app.mark_dirty()
+
+        def on_key(self, _widget, event):
+            if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+                self.app.entry.grab_focus()
+                return True
+            return False
+
+        def on_focus_out(self, *_):
+            if not self.body.strip():
+                GLib.idle_add(self.app.remove_row, self)
+            return False
+
+    class App:
+        def __init__(self):
+            self.window = None
+            self.rows = []
+            self.front = False
+            self.dirty = False
+            self.save_source = None
+            self.disk_text = read_notes()
+            self.tasks = parse_tasks(self.disk_text)
+            self.build_window()
+            NOTES.parent.mkdir(parents=True, exist_ok=True)
+            self.monitor = Gio.File.new_for_path(str(NOTES)).monitor_file(
+                Gio.FileMonitorFlags.NONE, None)
+            self.monitor.connect("changed", self.on_file_event)
+
+        # --- Window ---------------------------------------------------------
+        def build_window(self):
+            window = Gtk.Window(default_width=WIDTH, default_height=HEIGHT)
+            window.set_size_request(WIDTH, HEIGHT)
+            GtkLayerShell.init_for_window(window)
+            GtkLayerShell.set_namespace(window, "sticky-note")
+            GtkLayerShell.set_layer(window, GtkLayerShell.Layer.BOTTOM)
+            GtkLayerShell.set_keyboard_mode(window, GtkLayerShell.KeyboardMode.ON_DEMAND)
+            for edge in (GtkLayerShell.Edge.TOP, GtkLayerShell.Edge.RIGHT):
+                GtkLayerShell.set_anchor(window, edge, True)
+                GtkLayerShell.set_margin(window, edge, MARGIN)
+
+            outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, border_width=12)
+            outer.get_style_context().add_class("note")
+            header = Gtk.Box(spacing=8)
+            title = Gtk.Label(label="Today's tasks!")
+            title.get_style_context().add_class("title")
+            self.count = Gtk.Label()
+            self.count.get_style_context().add_class("count")
+            clear = Gtk.Button(label="Clear done", can_focus=False)
+            clear.connect("clicked", self.clear_done)
+            header.pack_start(title, False, False, 0)
+            header.pack_start(self.count, False, False, 0)
+            header.pack_end(clear, False, False, 0)
+
+            self.entry = Gtk.Entry(placeholder_text="Add a task…")
+            self.entry.connect("activate", self.add_from_entry)
+
+            self.list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            scroller = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
+            scroller.add(self.list_box)
+
+            outer.pack_start(header, False, False, 0)
+            outer.pack_start(self.entry, False, False, 0)
+            outer.pack_start(scroller, True, True, 0)
+            window.add(outer)
+            window.connect("key-press-event", self.on_key)
+            window.connect("delete-event", self.on_window_closed)
+
+            self.window = window
+            self.rows = []
+            self.show_tasks(self.tasks)
+            window.show_all()
+
+        def on_window_closed(self, *_):
+            # Sway closes layer surfaces when their monitor is unplugged. Keep
+            # the note alive by recreating it on whichever output remains.
+            self.save_now()
+            self.tasks = self.current_tasks()
+            self.front = False
+            GLib.timeout_add(RECREATE_DELAY_MS, self.recreate_window)
+            return False
+
+        def recreate_window(self):
+            self.build_window()
+            return GLib.SOURCE_REMOVE
+
+        def on_key(self, _widget, event):
+            if event.keyval == Gdk.KEY_Escape:
+                self.set_front(False)
+                return True
+            return False
+
+        # --- Front/back -----------------------------------------------------
+        def focused_monitor(self):
+            try:
+                result = subprocess.run(["swaymsg", "-t", "get_outputs"], capture_output=True,
+                                        text=True, timeout=2, check=True)
+                outputs = json.loads(result.stdout)
+            except (OSError, subprocess.SubprocessError, ValueError):
+                return None
+            rect = next((o["rect"] for o in outputs if o.get("focused")), None)
+            if not rect:
+                return None
+            display = Gdk.Display.get_default()
+            for i in range(display.get_n_monitors()):
+                monitor = display.get_monitor(i)
+                geometry = monitor.get_geometry()
+                if (geometry.x, geometry.y) == (rect["x"], rect["y"]):
+                    return monitor
+            return None
+
+        def set_front(self, front):
+            self.front = front
+            window = self.window
+            if front:
+                monitor = self.focused_monitor()
+                if monitor:
+                    GtkLayerShell.set_monitor(window, monitor)
+                GtkLayerShell.set_layer(window, GtkLayerShell.Layer.OVERLAY)
+                GtkLayerShell.set_keyboard_mode(window, GtkLayerShell.KeyboardMode.EXCLUSIVE)
+                self.entry.grab_focus()
+            else:
+                self.save_now()
+                GtkLayerShell.set_layer(window, GtkLayerShell.Layer.BOTTOM)
+                # Dropping to NONE first makes Sway hand focus back to the
+                # window underneath instead of leaving it on the note.
+                GtkLayerShell.set_keyboard_mode(window, GtkLayerShell.KeyboardMode.NONE)
+                GLib.timeout_add(100, self.allow_click_focus)
+
+        def allow_click_focus(self):
+            if not self.front:
+                GtkLayerShell.set_keyboard_mode(self.window,
+                                                GtkLayerShell.KeyboardMode.ON_DEMAND)
+            return GLib.SOURCE_REMOVE
+
+        def on_toggle_signal(self):
+            self.set_front(not self.front)
+            return GLib.SOURCE_CONTINUE
+
+        # --- Task list ------------------------------------------------------
+        def show_tasks(self, tasks):
+            for row in self.rows:
+                row.box.destroy()
+            self.rows = []
+            for done, body in tasks:
+                self.append_row(done, body)
+            self.update_count()
+
+        def append_row(self, done, body):
+            row = Row(self, done, body)
+            self.rows.append(row)
+            self.list_box.pack_start(row.box, False, False, 0)
+
+        def add_from_entry(self, entry):
+            body = entry.get_text().strip()
+            if body:
+                self.append_row(False, body)
+                entry.set_text("")
+                self.mark_dirty()
+
+        def remove_row(self, row):
+            if row in self.rows:
+                self.rows.remove(row)
+                row.box.destroy()
+                self.mark_dirty()
+            return GLib.SOURCE_REMOVE
+
+        def clear_done(self, *_):
+            for row in [r for r in self.rows if r.done]:
+                self.remove_row(row)
+
+        def current_tasks(self):
+            return [(row.done, row.body) for row in self.rows]
+
+        def update_count(self):
+            left = sum(not row.done for row in self.rows)
+            self.count.set_text(f"{left} left")
+
+        # --- Saving ---------------------------------------------------------
+        def mark_dirty(self):
+            self.update_count()
+            self.dirty = True
+            if self.save_source:
+                GLib.source_remove(self.save_source)
+            self.save_source = GLib.timeout_add(SAVE_DELAY_MS, self.on_save_timer)
+
+        def on_save_timer(self):
+            self.save_source = None
+            self.save_now()
+            return GLib.SOURCE_REMOVE
+
+        def save_now(self):
+            if self.save_source:
+                GLib.source_remove(self.save_source)
+                self.save_source = None
+            if self.dirty:
+                text = format_tasks(self.current_tasks())
+                write_notes(text)
+                self.disk_text = text
+                self.dirty = False
+
+        def on_file_event(self, *_):
+            # Pick up hand edits. Our own saves match disk_text and are ignored.
+            text = read_notes()
+            if text != self.disk_text:
+                self.disk_text = text
+                self.dirty = False
+                if self.save_source:
+                    GLib.source_remove(self.save_source)
+                    self.save_source = None
+                self.tasks = parse_tasks(text)
+                self.show_tasks(self.tasks)
+
+        def quit(self):
+            self.save_now()
+            Gtk.main_quit()
+            return GLib.SOURCE_REMOVE
+
+    Gtk.init(sys.argv)
+    if not GtkLayerShell.is_supported():
+        sys.exit("sticky-note: this compositor doesn't support wlr-layer-shell")
+
+    provider = Gtk.CssProvider()
+    provider.load_from_data(CSS)
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+    app = App()
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGUSR1, app.on_toggle_signal)
+    for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signum, app.quit)
+    os.write(lock_fd, str(os.getpid()).encode())  # handlers ready: toggles may signal us
+
+    if start_in_front:
+        app.set_front(True)
+    Gtk.main()
+
+
+def main():
+    command = sys.argv[1] if len(sys.argv) > 1 else "run"
+    if command not in ("run", "toggle"):
+        sys.exit(__doc__)
+    lock_fd = acquire_lock()
+    if lock_fd is None:
+        if command == "toggle":
+            signal_running_instance()
+        return
+    run(lock_fd, start_in_front=command == "toggle")
+
+
+if __name__ == "__main__":
+    main()
