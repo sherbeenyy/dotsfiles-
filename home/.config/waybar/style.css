@@ -118,6 +118,7 @@ window#waybar.empty #window {
 }
 
 #cpu,
+#custom-gpu,
 #memory,
 #backlight,
 #pulseaudio,
@@ -127,6 +128,8 @@ window#waybar.empty #window {
 }
 
 #cpu         { color: @yellow; }
+#custom-gpu  { color: @blue; }
+#custom-gpu.asleep { color: @inactive; }
 #memory      { color: @magenta; }
 #backlight   { color: @yellow; }
 #pulseaudio  { color: @blue; }

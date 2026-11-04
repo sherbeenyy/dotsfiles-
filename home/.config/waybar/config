@@ -44,8 +44,14 @@
         "orientation": "horizontal",
         "modules": [
             "cpu",
+            "custom/gpu",
             "memory"
         ]
+    },
+    "custom/gpu": {
+        "exec": "~/.local/bin/waybar-gpu",
+        "return-type": "json",
+        "restart-interval": 5
     },
     "cpu": {
         "interval": 2,
@@ -64,6 +70,7 @@
             "pulseaudio",
             "pulseaudio#mic",
             "network",
+            "network#speed",
             "battery"
         ]
     },
@@ -113,6 +120,15 @@
         "tooltip-format-wifi": "{essid} ({signalStrength}%)\n{ipaddr}/{cidr}\n󰁅 {bandwidthDownBits}  󰁝 {bandwidthUpBits}",
         "max-length": 25,
         "on-click": "foot --app-id=floating-terminal --window-size-pixels=750x550 nmtui"
+    },
+    "network#speed": {
+        "interval": 2,
+        "format-wifi": "󰁅 {bandwidthDownBytes}",
+        "format-ethernet": "󰁅 {bandwidthDownBytes}",
+        "format-linked": "",
+        "format-disconnected": "",
+        "tooltip-format": "󰁅 Download {bandwidthDownBytes}\n󰁝 Upload   {bandwidthUpBytes}",
+        "min-length": 11
     },
     "battery": {
         "states": {
